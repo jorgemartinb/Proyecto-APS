@@ -36,3 +36,6 @@ class UserPasswordChangeSerializer(serializers.Serializer):
             raise serializers.ValidationError({"old_password": "La contraseña actual es incorrecta."})
         
         return data
+    
+class LogoutSerializer(serializers.Serializer):
+    refresh = serializers.CharField(help_text="El token de refresco que se va a invalidar.")
