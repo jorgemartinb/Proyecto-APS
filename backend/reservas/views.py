@@ -1,5 +1,5 @@
 from rest_framework import generics
-from rest_framework.permissions import IsAuthenticatedOrReadOnly
+from rest_framework.permissions import IsAuthenticatedOrReadOnly, IsAdminUser
 from rest_framework.exceptions import PermissionDenied
 from .models import Reservation
 from .serializers import ReservationSerializer
@@ -32,3 +32,8 @@ class ReservationRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView
         if instance.user != self.request.user and not self.request.user.is_staff:
             raise PermissionDenied("Solo puedes eliminar tus propias reservas o ser administrador.")
         instance.delete()
+
+class AdminReservationDeleteView(generics.DestroyAPIView):
+    queryset = Reservation.objects.all()
+    serializer_class = ReservationSerializer
+    permission_classes = [IsAdminUser]

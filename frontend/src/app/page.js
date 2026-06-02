@@ -1116,14 +1116,34 @@ function ReservationItem({ currentUser, reservation, saving, onDelete, onEdit, i
           </button>
         ) : null}
 
-        {/* Acciones directas si el que mira la agenda es Admin */}
-        {isAdmin && est === "PENDIENTE" && (
-          <div className="flex gap-1.5 mt-1">
-            <button className="text-[11px] bg-emerald-600 text-white px-2 py-0.5 rounded hover:bg-emerald-700 transition" onClick={() => onUpdateStatus(reservation.id, "ACEPTADA")} disabled={saving} title="Aprobar de inmediato">
-              Aprobar
-            </button>
-            <button className="text-[11px] bg-rose-600 text-white px-2 py-0.5 rounded hover:bg-rose-700 transition" onClick={() => onUpdateStatus(reservation.id, "RECHAZADA")} disabled={saving} title="Rechazar solicitud">
-              Rechazar
+        {/* 👑 Acciones directas si el que mira la agenda es Admin */}
+        {isAdmin && (
+          <div className="flex flex-col gap-1 mt-1 items-end">
+            {/* Si está pendiente, muestra botones de Aprobar/Rechazar */}
+            {est === "PENDIENTE" && (
+              <div className="flex gap-1.5 mb-1">
+                <button className="text-[11px] bg-emerald-600 text-white px-2 py-0.5 rounded hover:bg-emerald-700 transition" onClick={() => onUpdateStatus(reservation.id, "ACEPTADA")} disabled={saving} title="Aprobar de inmediato">
+                  Aprobar
+                </button>
+                <button className="text-[11px] bg-rose-600 text-white px-2 py-0.5 rounded hover:bg-rose-700 transition" onClick={() => onUpdateStatus(reservation.id, "RECHAZADA")} disabled={saving} title="Rechazar solicitud">
+                  Rechazar
+                </button>
+              </div>
+            )}
+            
+            {/* 🔥 BOTÓN ROJO DE ADMIN: Usa la clase "icon-action danger" para ser idéntico al de arriba */}
+            <button 
+              className="icon-action danger" 
+              type="button"
+              onClick={() => {
+                if (confirm("¿Estás seguro de que deseas eliminar esta reserva definitivamente del sistema?")) {
+                  onDelete(reservation.id);
+                }
+              }} 
+              disabled={saving}
+              title="Borrar reserva como Administrador"
+            >
+              Borrar
             </button>
           </div>
         )}
