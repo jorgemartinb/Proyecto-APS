@@ -1,6 +1,13 @@
 from django.urls import path
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
-from .views import UserCreate, UserProfileView, UserPasswordChangeView, LogoutView
+from .views import (
+    AdminUserListCreateView,
+    AdminUserRetrieveUpdateDestroyView,
+    LogoutView,
+    UserCreate,
+    UserPasswordChangeView,
+    UserProfileView,
+)
 
 urlpatterns = [
     path('auth/register', UserCreate.as_view(), name='auth_register_no_slash'),
@@ -15,4 +22,8 @@ urlpatterns = [
     path('user/profile/', UserProfileView.as_view(), name='user_profile'),
     path('user/password-change', UserPasswordChangeView.as_view(), name='user_password_change_no_slash'),
     path('user/password-change/', UserPasswordChangeView.as_view(), name='user_password_change'),
+    path('admin/users', AdminUserListCreateView.as_view(), name='admin-user-list-create-no-slash'),
+    path('admin/users/', AdminUserListCreateView.as_view(), name='admin-user-list-create'),
+    path('admin/users/<int:pk>', AdminUserRetrieveUpdateDestroyView.as_view(), name='admin-user-detail-no-slash'),
+    path('admin/users/<int:pk>/', AdminUserRetrieveUpdateDestroyView.as_view(), name='admin-user-detail'),
 ]

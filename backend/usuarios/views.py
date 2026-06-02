@@ -3,8 +3,14 @@ from rest_framework import generics, status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
-from rest_framework.permissions import IsAuthenticated, AllowAny
-from .serializers import UserSerializer, UserProfileSerializer, UserPasswordChangeSerializer, LogoutSerializer
+from rest_framework.permissions import IsAuthenticated, AllowAny, IsAdminUser
+from .serializers import (
+    AdminUserSerializer,
+    LogoutSerializer,
+    UserPasswordChangeSerializer,
+    UserProfileSerializer,
+    UserSerializer,
+)
 
 Usuario = get_user_model()
 
@@ -21,6 +27,18 @@ class UserCreate(generics.CreateAPIView):
         user = Usuario.objects.create_user(**validated_data)
         headers = self.get_success_headers(serializer.data)
         return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+
+
+class AdminUserListCreateView(generics.ListCreateAPIView):
+    queryset = Usuario.objects.order_by('last_name', 'first_name', 'username')
+    serializer_class = AdminUserSerializer
+    permission_classes = [IsAdminUser]
+
+
+class AdminUserRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
+    queryset = Usuario.objects.all()
+    serializer_class = AdminUserSerializer
+    permission_classes = [IsAdminUser]
 
 
 class UserProfileView(APIView):
