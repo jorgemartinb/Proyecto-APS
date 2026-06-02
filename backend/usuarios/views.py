@@ -64,10 +64,10 @@ class LogoutView(APIView):
         try:
             refresh_token = request.data.get('refresh', None)
             if not refresh_token:
-                return Response({"detail": "No refresh token provided."}, status=status.HTTP_400_BAD_REQUEST)
+                return Response({"detail": "No se recibio el token de sesion."}, status=status.HTTP_400_BAD_REQUEST)
             
             token = RefreshToken(refresh_token)
             token.blacklist()
-            return Response({"detail": "Logout successful"}, status=status.HTTP_205_RESET_CONTENT)
+            return Response({"detail": "Sesion cerrada correctamente."}, status=status.HTTP_205_RESET_CONTENT)
         except Exception as e:
             return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
