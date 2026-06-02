@@ -1,8 +1,8 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f4f7f5;
+  --foreground: #111827;
 }
 
 @theme inline {
@@ -12,15 +12,401 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-height: 100%;
 }
 
 body {
+  min-height: 100%;
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled,
+input:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.panel {
+  border: 1px solid #d8e0da;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 18px 45px rgba(17, 24, 39, 0.06);
+  padding: 18px;
+}
+
+.btn {
+  display: inline-flex;
+  min-height: 42px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: 7px;
+  border: 1px solid transparent;
+  padding: 0 15px;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease,
+    transform 160ms ease;
+}
+
+.btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.btn-primary {
+  background: #0f766e;
+  color: #ffffff;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: #115e59;
+}
+
+.btn-secondary {
+  border-color: #cbd5d1;
+  background: #ffffff;
+  color: #1f2937;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  border-color: #94a3b8;
+  background: #f8fafc;
+}
+
+.icon-btn {
+  width: 42px;
+  padding: 0;
+  font-size: 24px;
+  line-height: 1;
+}
+
+.metric {
+  display: flex;
+  min-height: 72px;
+  align-items: center;
+  justify-content: space-between;
+  border: 1px solid #dde6e0;
+  border-radius: 8px;
+  background: #f7fbf8;
+  padding: 14px 16px;
+}
+
+.metric span {
+  color: #526171;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.metric strong {
+  color: #16322f;
+  font-size: 30px;
+  line-height: 1;
+}
+
+.calendar-head,
+.account,
+.section-title {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  overflow: hidden;
+  border: 1px solid #dbe3df;
+  border-radius: 8px;
+  background: #dbe3df;
+  gap: 1px;
+}
+
+.weekday {
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #eff5f1;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.calendar-day {
+  min-height: 118px;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 8px;
+  border: 0;
+  background: #ffffff;
+  color: #172033;
+  padding: 10px;
+  text-align: left;
+}
+
+.calendar-day:hover {
+  background: #f8fbf9;
+}
+
+.calendar-day.muted {
+  background: #f5f7f6;
+  color: #94a3b8;
+}
+
+.calendar-day.selected {
+  background: #e4f4ee;
+  box-shadow: inset 0 0 0 2px #0f766e;
+}
+
+.day-number {
+  display: flex;
+  min-height: 22px;
+  align-items: center;
+  gap: 6px;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.today-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: #dc2626;
+}
+
+.day-stack {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.reservation-pill,
+.more-pill {
+  min-width: 0;
+  overflow: hidden;
+  border-radius: 5px;
+  padding: 4px 6px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.reservation-pill {
+  background: #dbeafe;
+  color: #1e3a8a;
+}
+
+.more-pill {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.segmented {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border: 1px solid #d4ddd8;
+  border-radius: 8px;
+  background: #eef4f0;
+  padding: 3px;
+}
+
+.segmented button {
+  min-height: 38px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #526171;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.segmented button.active {
+  background: #ffffff;
+  color: #0f766e;
+  box-shadow: 0 6px 16px rgba(15, 118, 110, 0.12);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.field span {
+  color: #425466;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.field input {
+  min-height: 42px;
+  width: 100%;
+  border: 1px solid #cbd5d1;
+  border-radius: 7px;
+  background: #ffffff;
+  color: #111827;
+  padding: 0 11px;
+  outline: none;
+}
+
+.field input:focus {
+  border-color: #0f766e;
+  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.15);
+}
+
+.empty {
+  border: 1px dashed #cbd5d1;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #607083;
+  padding: 14px;
+  font-size: 14px;
+}
+
+.reservation-item {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  border: 1px solid #d8e0da;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 12px;
+}
+
+.reservation-item.mine {
+  border-color: #0f766e;
+  background: #f0fdfa;
+}
+
+.reservation-time {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.reservation-time strong {
+  color: #0f172a;
+  font-size: 16px;
+}
+
+.reservation-time span,
+.reservation-item p {
+  color: #64748b;
+  font-size: 13px;
+}
+
+.reservation-item h3 {
+  overflow-wrap: anywhere;
+  color: #0f172a;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.reservation-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.icon-action {
+  min-height: 34px;
+  border: 1px solid #cbd5d1;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #334155;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.icon-action:hover:not(:disabled) {
+  background: #f8fafc;
+}
+
+.icon-action.danger {
+  border-color: #fecaca;
+  color: #b91c1c;
+}
+
+.notice {
+  border-radius: 8px;
+  padding: 14px 16px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.notice-ok {
+  border: 1px solid #a7f3d0;
+  background: #ecfdf5;
+  color: #065f46;
+}
+
+.notice-error {
+  border: 1px solid #fecaca;
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+@media (max-width: 760px) {
+  .panel {
+    padding: 14px;
+  }
+
+  .calendar-head,
+  .account,
+  .section-title {
+    flex-direction: column;
+  }
+
+  .calendar-grid {
+    border-radius: 7px;
+  }
+
+  .weekday {
+    min-height: 32px;
+    font-size: 11px;
+  }
+
+  .calendar-day {
+    min-height: 82px;
+    padding: 7px;
+  }
+
+  .reservation-pill {
+    width: 100%;
+    height: 6px;
+    padding: 0;
+    color: transparent;
+  }
+
+  .more-pill {
+    display: none;
+  }
 }

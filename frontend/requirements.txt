@@ -1,0 +1,26 @@
+# Requisitos del frontend
+#
+# Este proyecto usa Next.js/React, asi que las dependencias ejecutables se
+# instalan con npm usando package.json y package-lock.json:
+#
+#   npm install
+#
+# Versiones de entorno necesarias:
+node>=20.9.0
+npm>=10
+
+# Dependencias de produccion declaradas en package.json:
+next==16.2.6
+react==19.2.4
+react-dom==19.2.4
+
+# Dependencias de desarrollo declaradas en package.json:
+@tailwindcss/postcss>=4
+babel-plugin-react-compiler==1.0.0
+eslint>=9
+eslint-config-next==16.2.6
+tailwindcss>=4
+
+# Variables de entorno recomendadas:
+# BACKEND_API_URL=https://tu-backend.com
+# NEXT_PUBLIC_API_BASE_URL=/api
