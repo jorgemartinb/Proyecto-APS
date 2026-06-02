@@ -26,7 +26,7 @@ SECRET_KEY = os.environ.get('SECRET_KEY', 'tu-clave-secreta-de-desarrollo-super-
 
 DEBUG = 'RENDER' not in os.environ
 
-ALLOWED_HOSTS = ['localhost', '127.0.0.1', '.render.com']
+ALLOWED_HOSTS = ['localhost', '127.0.0.1', '.onrender.com']
 
 
 # Application definition
