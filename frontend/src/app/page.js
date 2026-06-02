@@ -112,6 +112,14 @@ function sortReservations(reservations) {
   return [...reservations].sort((a, b) => new Date(a.start_time) - new Date(b.start_time));
 }
 
+function overlapsReservation(reservation, start, end, editingId) {
+  if (editingId && reservation.id === editingId) return false;
+
+  const reservationStart = new Date(reservation.start_time);
+  const reservationEnd = new Date(reservation.end_time);
+  return reservationStart < end && reservationEnd > start;
+}
+
 export default function Home() {
   const today = useMemo(() => new Date(), []);
   const [auth, setAuth] = useState(null);
@@ -246,6 +254,15 @@ export default function Home() {
     () => reservations.filter((reservation) => new Date(reservation.end_time) >= new Date()).slice(0, 6),
     [reservations],
   );
+  const conflictingReservation = useMemo(() => {
+    if (!form.start_time || !form.end_time) return null;
+
+    const start = new Date(form.start_time);
+    const end = new Date(form.end_time);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start >= end) return null;
+
+    return reservations.find((reservation) => overlapsReservation(reservation, start, end, editingId)) || null;
+  }, [editingId, form.end_time, form.start_time, reservations]);
 
   async function handleAuthSubmit(event) {
     event.preventDefault();
@@ -323,6 +340,10 @@ export default function Home() {
     event.preventDefault();
     if (!auth) {
       setError("Inicia sesion para crear una reserva.");
+      return;
+    }
+    if (conflictingReservation) {
+      setError("Ese tramo ya esta reservado. Elige otra hora.");
       return;
     }
 
@@ -567,8 +588,22 @@ export default function Home() {
                 />
               </label>
 
+              {conflictingReservation ? (
+                <div className="conflict-warning" role="alert">
+                  <strong>Tramo ocupado</strong>
+                  <span>
+                    {TIME_FORMAT.format(new Date(conflictingReservation.start_time))} - {TIME_FORMAT.format(new Date(conflictingReservation.end_time))} por{" "}
+                    {conflictingReservation.user_username || "otro usuario"}.
+                  </span>
+                </div>
+              ) : (
+                <div className="availability-ok" role="status">
+                  Tramo disponible segun las reservas cargadas.
+                </div>
+              )}
+
               <div className="flex flex-wrap gap-2 pt-1">
-                <button className="btn btn-primary" type="submit" disabled={!auth || saving}>
+                <button className="btn btn-primary" type="submit" disabled={!auth || saving || Boolean(conflictingReservation)}>
                   {saving ? "Guardando..." : editingId ? "Actualizar" : "Reservar"}
                 </button>
                 {editingId ? (
