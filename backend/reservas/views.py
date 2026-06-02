@@ -12,17 +12,23 @@ class ReservationListCreateView(generics.ListCreateAPIView):
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
 
+
 class ReservationRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Reservation.objects.all()
     serializer_class = ReservationSerializer
     permission_classes = [IsAuthenticatedOrReadOnly]
 
     def perform_update(self, serializer):
-        if serializer.instance.user != self.request.user:
-            raise PermissionDenied("Solo puedes modificar tus propias reservas.")
-        serializer.save(user=self.request.user)
+        if serializer.instance.user != self.request.user and not self.request.user.is_staff:
+            raise PermissionDenied("Solo puedes modificar tus propias reservas o ser administrador.")
+        
+
+        if self.request.user.is_staff:
+            serializer.save()
+        else:
+            serializer.save(user=self.request.user)
 
     def perform_destroy(self, instance):
-        if instance.user != self.request.user:
-            raise PermissionDenied("Solo puedes eliminar tus propias reservas.")
+        if instance.user != self.request.user and not self.request.user.is_staff:
+            raise PermissionDenied("Solo puedes eliminar tus propias reservas o ser administrador.")
         instance.delete()

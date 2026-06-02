@@ -9,8 +9,7 @@ class UserSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Usuario
-        fields = ['username', 'email', 'password', 'password_two', 'first_name', 'last_name']
-
+        fields = ['id', 'username', 'first_name', 'last_name', 'email', 'is_staff', 'telefono', 'dni_nif', 'numero_socio', 'es_socio']
     def validate(self, data):
         if data['password'] != data['password_two']:
             raise serializers.ValidationError({"password_two": "Las contraseñas no coinciden."})
