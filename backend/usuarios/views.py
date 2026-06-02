@@ -4,7 +4,6 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.permissions import IsAuthenticated, AllowAny
-# Asegúrate de importar el LogoutSerializer aquí:
 from .serializers import UserSerializer, UserProfileSerializer, UserPasswordChangeSerializer, LogoutSerializer
 
 Usuario = get_user_model()
