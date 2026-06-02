@@ -18,6 +18,35 @@ const TIME_FORMAT = new Intl.DateTimeFormat("es-ES", {
   minute: "2-digit",
 });
 const WEEKDAYS = ["Lun", "Mar", "Mie", "Jue", "Vie", "Sab", "Dom"];
+const FIELD_LABELS = {
+  username: "Usuario",
+  email: "Email",
+  password: "Contraseña",
+  password_two: "Repetir contraseña",
+  first_name: "Nombre",
+  last_name: "Apellidos",
+  start_time: "Inicio",
+  end_time: "Fin",
+  title: "Título",
+  non_field_errors: "Error",
+  detail: "Error",
+};
+const ERROR_TRANSLATIONS = [
+  ["No active account found with the given credentials", "No existe una cuenta activa con ese usuario y contraseña."],
+  ["Given token not valid for any token type", "La sesión no es válida. Vuelve a iniciar sesión."],
+  ["Token is invalid or expired", "La sesión ha caducado. Vuelve a iniciar sesión."],
+  ["This field is required.", "Este campo es obligatorio."],
+  ["This field may not be blank.", "Este campo no puede estar vacío."],
+  ["Enter a valid email address.", "Introduce un email válido."],
+  ["A user with that username already exists.", "Ya existe un usuario con ese nombre."],
+  ["No refresh token provided.", "No se recibió el token de sesión."],
+  ["Logout successful", "Sesión cerrada correctamente."],
+  ["Invalid password", "Contraseña incorrecta."],
+  ["Unauthorized", "No tienes autorización."],
+  ["Forbidden", "No tienes permiso para hacer esta acción."],
+  ["Not found.", "No se encontró el recurso."],
+  ["Bad Request", "Solicitud incorrecta."],
+];
 
 function pad(value) {
   return String(value).padStart(2, "0");
@@ -76,13 +105,26 @@ function saveStoredAuth(auth) {
   }
 }
 
+function translateText(value) {
+  if (value === null || value === undefined) return "";
+
+  let text = String(value);
+  for (const [source, target] of ERROR_TRANSLATIONS) {
+    text = text.replaceAll(source, target);
+  }
+  return text;
+}
+
 function normalizeError(error) {
   if (!error || typeof error !== "object") return "No se pudo completar la accion.";
-  if (error.detail) return error.detail;
-  if (error.non_field_errors) return Array.isArray(error.non_field_errors) ? error.non_field_errors.join(" ") : error.non_field_errors;
+  if (error.detail) return translateText(error.detail);
+  if (error.non_field_errors) {
+    const value = Array.isArray(error.non_field_errors) ? error.non_field_errors.join(" ") : error.non_field_errors;
+    return translateText(value);
+  }
 
   return Object.entries(error)
-    .map(([field, value]) => `${field}: ${Array.isArray(value) ? value.join(" ") : value}`)
+    .map(([field, value]) => `${FIELD_LABELS[field] || field}: ${translateText(Array.isArray(value) ? value.join(" ") : value)}`)
     .join(" ");
 }
 
@@ -446,6 +488,25 @@ export default function Home() {
         </div>
       </section>
 
+      {(status || error) && (
+        <section className={`app-alert ${error ? "app-alert-error" : "app-alert-ok"}`} role={error ? "alert" : "status"}>
+          <div>
+            <strong>{error ? "Error" : "Correcto"}</strong>
+            <span>{error || status}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setError("");
+              setStatus("");
+            }}
+            aria-label="Cerrar alerta"
+          >
+            ×
+          </button>
+        </section>
+      )}
+
       <div className="mx-auto grid w-full max-w-7xl gap-5 px-4 py-5 sm:px-6 lg:grid-cols-[minmax(0,1fr)_380px] lg:px-8">
         <section className="panel">
           <div className="calendar-head">
@@ -621,12 +682,6 @@ export default function Home() {
               </div>
             </form>
           </section>
-
-          {(status || error) && (
-            <section className={`notice ${error ? "notice-error" : "notice-ok"}`} role="status">
-              {error || status}
-            </section>
-          )}
         </aside>
       </div>
     </main>
