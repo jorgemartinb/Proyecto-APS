@@ -41,46 +41,17 @@ class UserProfileSerializer(serializers.ModelSerializer):
 
 # Este serializer le da todo el poder al Admin para buscar, crear, editar altas/bajas y recibos
 class AdminUserSerializer(serializers.ModelSerializer):
-    password = serializers.CharField(write_only=True, required=False, allow_blank=True)
-    password_two = serializers.CharField(write_only=True, required=False, allow_blank=True)
-
     class Meta:
         model = Usuario
-        fields = '__all__' # Expone todos los campos para control total de administración
+        exclude = ['password']
         read_only_fields = ['id']
 
-    def validate(self, data):
-        password = data.get('password')
-        password_two = data.get('password_two')
-        if password or password_two:
-            if password != password_two:
-                raise serializers.ValidationError({"password_two": "Las contraseñas no coinciden."})
-        return data
-
     def create(self, validated_data):
-        password = validated_data.pop('password', None)
-        validated_data.pop('password_two', None)
+        # Cuando el admin crea un usuario manualmente, lo creamos sin contraseña asignada por seguridad.
         user = Usuario(**validated_data)
-        if password:
-            user.set_password(password)
-        else:
-            user.set_unusable_password()
+        user.set_unusable_password()
         user.save()
         return user
-
-    def update(self, instance, validated_data):
-        password = validated_data.pop('password', None)
-        validated_data.pop('password_two', None)
-
-        for field, value in validated_data.items():
-            setattr(instance, field, value)
-
-        if password:
-            instance.set_password(password)
-
-        instance.save()
-        return instance
-
 
 class UserPasswordChangeSerializer(serializers.Serializer):
     old_password = serializers.CharField(write_only=True)
