@@ -71,6 +71,11 @@ class Usuario(AbstractUser):
             self.is_alta = False
         # BAJA_SOLICITADA mantiene es_socio=True hasta que el admin la tramite a NO_SOCIO
 
+        # ⚡ Solo los socios pueden tener número de socio. 
+        # Si el usuario no es socio (o se le tramita la baja a NO_SOCIO), limpiamos el número.
+        if not self.es_socio:
+            self.numero_socio = None
+
         # ⚡ LÓGICA DEL NÚMERO DE SOCIO AUTOMÁTICO Y CORRELATIVO
         # Si el usuario ahora es socio, está de alta y todavía no tiene un número asignado:
         if self.es_socio and self.is_alta and not self.numero_socio:
