@@ -10,80 +10,55 @@ class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = Usuario
         fields = [
-            'id',
-            'username',
-            'password',
-            'password_two',
-            'first_name',
-            'last_name',
-            'email',
-            'is_staff',
-            'telefono',
-            'dni_nif',
-            'numero_socio',
-            'es_socio',
+            'id', 'username', 'password', 'password_two', 
+            'first_name', 'last_name', 'email', 'telefono', 'dni_nif'
         ]
-        read_only_fields = ['is_staff']
 
     def validate(self, data):
         if data['password'] != data['password_two']:
             raise serializers.ValidationError({"password_two": "Las contraseñas no coinciden."})
         return data
 
+
+# Este serializer se encargará de mostrar y permitir rellenar la ficha de inscripción del Socio
 class UserProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = Usuario
         fields = [
-            'id',
-            'username',
-            'email',
-            'first_name',
-            'last_name',
-            'is_staff',
-            'telefono',
-            'dni_nif',
-            'numero_socio',
-            'es_socio',
+            'id', 'username', 'email', 'first_name', 'last_name', 'telefono', 'dni_nif',
+            'es_socio', 'numero_socio', 'is_alta', 'recibo_anual_pagado', 'fecha_pago_recibo',
+            'domicilio', 'numero_casa', 'piso', 'letra', 'localidad', 'codigo_postal',
+            'email_secundario', 'telefono_movil_2', 'titular_cuenta', 'nif_titular', 
+            'iban', 'entidad_bancaria', 'autoriza_imagenes', 'is_staff'
         ]
-        read_only_fields = ['id', 'username', 'is_staff', 'numero_socio', 'es_socio']
+        # Protegemos los campos administrativos para que el socio común no se los auto-apruebe
+        read_only_fields = [
+            'id', 'username', 'is_staff', 'numero_socio', 
+            'es_socio', 'is_alta', 'recibo_anual_pagado', 'fecha_pago_recibo'
+        ]
 
 
+# Este serializer le da todo el poder al Admin para buscar, crear, editar altas/bajas y recibos
 class AdminUserSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=False, allow_blank=True)
     password_two = serializers.CharField(write_only=True, required=False, allow_blank=True)
 
     class Meta:
         model = Usuario
-        fields = [
-            'id',
-            'username',
-            'password',
-            'password_two',
-            'first_name',
-            'last_name',
-            'email',
-            'is_staff',
-            'telefono',
-            'dni_nif',
-            'numero_socio',
-            'es_socio',
-        ]
-        read_only_fields = ['id', 'is_staff']
+        fields = '__all__' # Expone todos los campos para control total de administración
+        read_only_fields = ['id']
 
     def validate(self, data):
         password = data.get('password')
         password_two = data.get('password_two')
-
         if password or password_two:
             if password != password_two:
                 raise serializers.ValidationError({"password_two": "Las contraseñas no coinciden."})
-
         return data
 
     def create(self, validated_data):
         password = validated_data.pop('password', None)
         validated_data.pop('password_two', None)
-
         user = Usuario(**validated_data)
         if password:
             user.set_password(password)
@@ -105,6 +80,7 @@ class AdminUserSerializer(serializers.ModelSerializer):
         instance.save()
         return instance
 
+
 class UserPasswordChangeSerializer(serializers.Serializer):
     old_password = serializers.CharField(write_only=True)
     new_password = serializers.CharField(write_only=True)
@@ -113,11 +89,9 @@ class UserPasswordChangeSerializer(serializers.Serializer):
     def validate(self, data):
         if data['new_password'] != data['new_password_two']:
             raise serializers.ValidationError({"new_password_two": "La nueva contraseña no coincide."})
-        
         request = self.context.get('request')
         if request and not request.user.check_password(data['old_password']):
             raise serializers.ValidationError({"old_password": "La contraseña actual es incorrecta."})
-        
         return data
     
 class LogoutSerializer(serializers.Serializer):

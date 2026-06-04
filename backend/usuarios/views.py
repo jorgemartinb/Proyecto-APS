@@ -23,12 +23,15 @@ class UserCreate(generics.CreateAPIView):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         validated_data = serializer.validated_data
-        validated_data.pop('password_two')
+        validated_data.pop('password_two', None) # Usamos pop con None por seguridad
+        
+        # Al crearse con create_user, nacerá con es_socio=False por defecto tal como querías
         user = Usuario.objects.create_user(**validated_data)
-        headers = self.get_success_headers(serializer.data)
-        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+        
+        # Devolvemos los datos limpios de la respuesta
+        return Response(UserSerializer(user).data, status=status.HTTP_201_CREATED)
 
-
+# 👑 Permite al administrador listar y editar los nuevos campos (is_alta, recibos, etc.)
 class AdminUserListCreateView(generics.ListCreateAPIView):
     queryset = Usuario.objects.order_by('last_name', 'first_name', 'username')
     serializer_class = AdminUserSerializer
@@ -41,9 +44,9 @@ class AdminUserRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
     permission_classes = [IsAdminUser]
 
 
+# El propio usuario utilizará esta vista para rellenar su ficha completa y "Darse de Alta"
 class UserProfileView(APIView):
     permission_classes = [IsAuthenticated]
-    serializer_class = UserProfileSerializer 
 
     def get(self, request):
         user = request.user
@@ -52,16 +55,24 @@ class UserProfileView(APIView):
 
     def put(self, request):
         user = request.user
-        serializer = UserProfileSerializer(user, data=request.data)
+        # Permitimos actualizar sus datos del Excel
+        serializer = UserProfileSerializer(user, data=request.data, partial=True)
         if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data)
+            # Excepción de lógica de negocio: Cuando rellena la ficha por primera vez,
+            # forzamos que pase a ser socio activo en la aplicación.
+            instance = serializer.save()
+            if not instance.es_socio:
+                instance.es_socio = True
+                instance.is_alta = True
+                instance.save()
+            
+            # Devolvemos el perfil actualizado completo
+            return Response(UserProfileSerializer(instance).data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 class UserPasswordChangeView(APIView):
     permission_classes = [IsAuthenticated]
-    serializer_class = UserPasswordChangeSerializer 
 
     def put(self, request):
         user = request.user
@@ -76,7 +87,6 @@ class UserPasswordChangeView(APIView):
 
 class LogoutView(APIView):
     permission_classes = [IsAuthenticated]
-    serializer_class = LogoutSerializer 
 
     def post(self, request):
         try:
