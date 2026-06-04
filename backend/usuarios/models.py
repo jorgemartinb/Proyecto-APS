@@ -10,6 +10,16 @@ class Usuario(AbstractUser):
     # 🆕 Modificado a Integer o string controlado. Usaremos Integer para poder calcular el siguiente correlativo automáticamente.
     numero_socio = models.PositiveIntegerField(blank=True, null=True, unique=True)
     
+    # ⏳ OPCIONES DE ESTADO DE SOCIO (Similar a Reservas)
+    ESTADOS_SOCIO = [
+        ('NO_SOCIO', 'No Socio'),
+        ('PENDIENTE', 'Solicitud Pendiente'),
+        ('ACEPTADA', 'Socio Activo'),
+        ('RECHAZADA', 'Solicitud Rechazada'),
+        ('BAJA_SOLICITADA', 'Baja Solicitada'),
+    ]
+    estado_socio = models.CharField(max_length=20, choices=ESTADOS_SOCIO, default='NO_SOCIO')
+
     # 🌟 Tu Estrategia: Por defecto se registra como usuario normal (False), cambia a True al rellenar la ficha
     es_socio = models.BooleanField(default=False) 
 
@@ -40,6 +50,15 @@ class Usuario(AbstractUser):
     autoriza_imagenes = models.BooleanField(default=False, verbose_name="Autoriza publicación de imágenes")
 
     def save(self, *args, **kwargs):
+        # Sincronizamos automáticamente los flags booleanos según el estado de la solicitud
+        if self.estado_socio == 'ACEPTADA':
+            self.es_socio = True
+            self.is_alta = True
+        elif self.estado_socio in ['NO_SOCIO', 'RECHAZADA']:
+            self.es_socio = False
+            self.is_alta = False
+        # BAJA_SOLICITADA mantiene es_socio=True hasta que el admin la tramite a NO_SOCIO
+
         # ⚡ LÓGICA DEL NÚMERO DE SOCIO AUTOMÁTICO Y CORRELATIVO
         # Si el usuario ahora es socio, está de alta y todavía no tiene un número asignado:
         if self.es_socio and self.is_alta and not self.numero_socio:

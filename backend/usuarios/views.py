@@ -58,17 +58,35 @@ class UserProfileView(APIView):
         # Permitimos actualizar sus datos del Excel
         serializer = UserProfileSerializer(user, data=request.data, partial=True)
         if serializer.is_valid():
-            # Excepción de lógica de negocio: Cuando rellena la ficha por primera vez,
-            # forzamos que pase a ser socio activo en la aplicación.
+            # Al rellenar la ficha por primera vez o tras un rechazo previo, 
+            # lanzamos la solicitud de socio (PENDIENTE)
+            if user.estado_socio in ['NO_SOCIO', 'RECHAZADA']:
+                user.estado_socio = 'PENDIENTE'
+                user.save()
+            
             instance = serializer.save()
-            if not instance.es_socio:
-                instance.es_socio = True
-                instance.is_alta = True
-                instance.save()
             
             # Devolvemos el perfil actualizado completo
             return Response(UserProfileSerializer(instance).data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+class UserRequestBajaView(APIView):
+    """
+    Permite a un socio activo solicitar su baja del sistema.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        user = request.user
+        if not user.es_socio or user.estado_socio != 'ACEPTADA':
+            return Response(
+                {"detail": "Solo los socios activos pueden solicitar la baja."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        user.estado_socio = 'BAJA_SOLICITADA'
+        user.save()
+        return Response({"detail": "Solicitud de baja enviada. El administrador la procesará pronto."})
 
 
 class UserPasswordChangeView(APIView):

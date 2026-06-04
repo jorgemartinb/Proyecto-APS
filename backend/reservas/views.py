@@ -22,11 +22,8 @@ class ReservationRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView
         if serializer.instance.user != self.request.user and not self.request.user.is_staff:
             raise PermissionDenied("Solo puedes modificar tus propias reservas o ser administrador.")
         
-
-        if self.request.user.is_staff:
-            serializer.save()
-        else:
-            serializer.save(user=self.request.user)
+        # El usuario siempre se mantiene, a menos que un admin decida lo contrario
+        serializer.save()
 
     def perform_destroy(self, instance):
         if instance.user != self.request.user and not self.request.user.is_staff:

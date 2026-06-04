@@ -27,7 +27,8 @@ class ReservationSerializer(serializers.ModelSerializer):
                     {"end_time": "La fecha y hora de fin debe ser posterior a la de inicio."}
                 )
 
-            if (not self.instance or 'start_time' in data) and start_time < timezone.now():
+            # Solo validamos que sea en el futuro si es una reserva nueva 
+            if not self.instance and start_time < timezone.now():
                 raise serializers.ValidationError({
                 "start_time": "No puedes tramitar una reserva en el pasado. Elige una fecha y hora futura."
             })

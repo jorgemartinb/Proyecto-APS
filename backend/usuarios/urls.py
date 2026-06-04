@@ -7,6 +7,7 @@ from .views import (
     UserCreate,
     UserPasswordChangeView,
     UserProfileView,
+    UserRequestBajaView,
 )
 
 urlpatterns = [
@@ -20,6 +21,8 @@ urlpatterns = [
     path('auth/logout/', LogoutView.as_view(), name='auth_logout'),
     path('user/profile', UserProfileView.as_view(), name='user_profile_no_slash'),
     path('user/profile/', UserProfileView.as_view(), name='user_profile'),
+    path('user/request-baja', UserRequestBajaView.as_view(), name='user_request_baja_no_slash'),
+    path('user/request-baja/', UserRequestBajaView.as_view(), name='user_request_baja'),
     path('user/password-change', UserPasswordChangeView.as_view(), name='user_password_change_no_slash'),
     path('user/password-change/', UserPasswordChangeView.as_view(), name='user_password_change'),
     path('admin/users', AdminUserListCreateView.as_view(), name='admin-user-list-create-no-slash'),

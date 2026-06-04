@@ -26,15 +26,15 @@ class UserProfileSerializer(serializers.ModelSerializer):
         model = Usuario
         fields = [
             'id', 'username', 'email', 'first_name', 'last_name', 'telefono', 'dni_nif',
-            'es_socio', 'numero_socio', 'is_alta', 'recibo_anual_pagado', 'fecha_pago_recibo',
+            'es_socio', 'numero_socio', 'is_alta', 'estado_socio', 'recibo_anual_pagado', 'fecha_pago_recibo',
             'domicilio', 'numero_casa', 'piso', 'letra', 'localidad', 'codigo_postal',
             'email_secundario', 'telefono_movil_2', 'titular_cuenta', 'nif_titular', 
             'iban', 'entidad_bancaria', 'autoriza_imagenes', 'is_staff'
         ]
         # Protegemos los campos administrativos para que el socio común no se los auto-apruebe
         read_only_fields = [
-            'id', 'username', 'is_staff', 'numero_socio', 
-            'es_socio', 'is_alta', 'recibo_anual_pagado', 'fecha_pago_recibo'
+            'id', 'username', 'is_staff', 'numero_socio',
+            'es_socio', 'is_alta', 'estado_socio', 'recibo_anual_pagado', 'fecha_pago_recibo'
         ]
 
 
