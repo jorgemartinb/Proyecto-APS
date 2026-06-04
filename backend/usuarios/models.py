@@ -6,6 +6,7 @@ class Usuario(AbstractUser):
     # --- Datos Básicos Existentes ---
     telefono = models.CharField(max_length=20, blank=True, null=True)
     dni_nif = models.CharField(max_length=20, blank=True, null=True, unique=True)
+    fecha_nacimiento = models.DateField(blank=True, null=True)
     
     # 🆕 Modificado a Integer o string controlado. Usaremos Integer para poder calcular el siguiente correlativo automáticamente.
     numero_socio = models.PositiveIntegerField(blank=True, null=True, unique=True)
@@ -40,13 +41,24 @@ class Usuario(AbstractUser):
     email_secundario = models.EmailField(blank=True, null=True, verbose_name="Email 2")
     telefono_movil_2 = models.CharField(max_length=20, blank=True, null=True, verbose_name="Teléfono Móvil 2")
 
-    # --- 🆕 Nuevos Datos Bancarios (Extraídos del Excel) ---
+    # --- 🆕 Datos Bancarios Completos ---
     titular_cuenta = models.CharField(max_length=255, blank=True, null=True)
     nif_titular = models.CharField(max_length=20, blank=True, null=True)
     iban = models.CharField(max_length=34, blank=True, null=True)
     entidad_bancaria = models.CharField(max_length=150, blank=True, null=True)
+    # Desglose tradicional
+    banco_entidad = models.CharField(max_length=4, blank=True, null=True)
+    banco_sucursal = models.CharField(max_length=4, blank=True, null=True)
+    banco_dc = models.CharField(max_length=2, blank=True, null=True)
+    banco_cuenta = models.CharField(max_length=10, blank=True, null=True)
 
-    # --- 🆕 Autorizaciones ---
+    # --- 🆕 Cuota Familiar (Hasta 5 miembros) ---
+    # Guardamos una lista de objetos: [{"nombre": "", "apellidos": "", "nif": "", "fnac": ""}, ...]
+    familiares = models.JSONField(default=list, blank=True)
+
+    # --- 🆕 Información Complementaria ---
+    es_socio_otras_asoc = models.BooleanField(default=False)
+    cuales_otras_asoc = models.TextField(blank=True, null=True)
     autoriza_imagenes = models.BooleanField(default=False, verbose_name="Autoriza publicación de imágenes")
 
     def save(self, *args, **kwargs):
