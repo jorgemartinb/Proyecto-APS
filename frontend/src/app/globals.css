@@ -484,3 +484,92 @@ input:disabled {
     display: none;
   }
 }
+
+
+/* ========================= */
+/* Reservas en calendario */
+/* ========================= */
+
+.reservation-pill-accepted {
+  background: #e2e8f0;
+  color: #334155;
+  border: 1px solid #cbd5e1;
+}
+
+.reservation-pill-mine {
+  background: #dcfce7 !important;
+  color: #166534 !important;
+  border: 1px solid #86efac !important;
+}
+
+.reservation-pill-pending {
+  background: linear-gradient(135deg, #f59e0b, #f97316) !important;
+  color: #ffffff !important;
+  border: 1px solid #ea580c !important;
+  box-shadow:
+    0 0 0 2px rgba(245, 158, 11, 0.18),
+    0 6px 14px rgba(249, 115, 22, 0.24);
+  font-weight: 900;
+  letter-spacing: 0.02em;
+}
+
+.reservation-pill-mine.reservation-pill-pending {
+  background: linear-gradient(135deg, #16a34a, #f97316) !important;
+  color: #ffffff !important;
+  border: 2px solid #16a34a !important;
+  box-shadow:
+    0 0 0 2px rgba(22, 163, 74, 0.18),
+    0 6px 14px rgba(249, 115, 22, 0.22);
+}
+
+.reservation-pill-rejected {
+  background: #ffe4e6 !important;
+  color: #9f1239 !important;
+  border: 1px solid #fecdd3 !important;
+  text-decoration: line-through;
+  opacity: 0.65;
+}
+
+/* ========================= */
+/* Tarjetas de agenda */
+/* ========================= */
+
+.reservation-item {
+  border-left: 5px solid #cbd5e1;
+}
+
+.reservation-item.mine {
+  background: #f0fdf4;
+  border-color: #86efac;
+  border-left-color: #16a34a;
+  box-shadow: 0 8px 22px rgba(22, 163, 74, 0.08);
+}
+
+.reservation-item-pending {
+  border-left-color: #f97316;
+  background: #fff7ed;
+  box-shadow: 0 10px 24px rgba(249, 115, 22, 0.12);
+}
+
+.reservation-item.mine.reservation-item-pending {
+  background: linear-gradient(135deg, #f0fdf4 0%, #fff7ed 100%);
+  border-color: #86efac;
+  border-left-color: #16a34a;
+  box-shadow:
+    0 0 0 2px rgba(22, 163, 74, 0.08),
+    0 10px 24px rgba(249, 115, 22, 0.12);
+}
+
+.reservation-item-accepted {
+  border-left-color: #64748b;
+}
+
+.reservation-item-accepted.mine {
+  border-left-color: #16a34a;
+}
+
+.reservation-item-rejected {
+  border-left-color: #e11d48;
+  background: #fff1f2;
+  opacity: 0.82;
+}

@@ -193,6 +193,8 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState("calendar"); // Opciones: "calendar", "admin_reservations", "admin_socios"
   const [socios, setSocios] = useState([]);
   const [loadingSocios, setLoadingSocios] = useState(false);
+  const [socioSearch, setSocioSearch] = useState("");
+  const [editingSocioId, setEditingSocioId] = useState(null);
   const [socioForm, setSocioForm] = useState({
     username: "",
     email: "",
@@ -339,6 +341,29 @@ export default function Home() {
     () => reservations.filter((reservation) => reservation.user_username === currentUser),
     [currentUser, reservations],
   );
+
+  const filteredSocios = useMemo(() => {
+    const term = socioSearch.trim().toLowerCase();
+
+    if (!term) return socios;
+
+    return socios.filter((socio) => {
+      const text = [
+        socio.username,
+        socio.email,
+        socio.first_name,
+        socio.last_name,
+        socio.dni_nif,
+        socio.telefono,
+        socio.numero_socio,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      return text.includes(term);
+    });
+  }, [socioSearch, socios]);
   const upcomingReservations = useMemo(
     () => reservations.filter((reservation) => new Date(reservation.end_time) >= new Date() && reservation.estado !== "RECHAZADA").slice(0, 6),
     [reservations],
@@ -480,7 +505,39 @@ export default function Home() {
     }
   }
 
-  // 📝 NUEVA ACCIÓN: CREAR UN SOCIO MANUALMENTE (Hojas de papel)
+  // 👥 ACCIONES DE ADMIN PARA GESTIONAR USUARIOS / SOCIOS
+  function startEditingSocio(socio) {
+    setEditingSocioId(socio.id);
+    setSocioForm({
+      username: socio.username || "",
+      email: socio.email || "",
+      password: "",
+      password_two: "",
+      first_name: socio.first_name || "",
+      last_name: socio.last_name || "",
+      dni_nif: socio.dni_nif || "",
+      telefono: socio.telefono || "",
+      numero_socio: socio.numero_socio || "",
+      es_socio: Boolean(socio.es_socio),
+    });
+  }
+
+  function cancelEditingSocio() {
+    setEditingSocioId(null);
+    setSocioForm({
+      username: "",
+      email: "",
+      password: "",
+      password_two: "",
+      first_name: "",
+      last_name: "",
+      dni_nif: "",
+      telefono: "",
+      numero_socio: "",
+      es_socio: true,
+    });
+  }
+
   async function handleCreateSocioSubmit(event) {
     event.preventDefault();
     setSaving(true);
@@ -488,23 +545,62 @@ export default function Home() {
     setStatus("");
 
     try {
-      await request("/usuarios/admin-list/", {
-        method: "POST",
-        body: JSON.stringify(socioForm),
+      const payload = {
+        ...socioForm,
+        password_two: socioForm.password,
+      };
+
+      if (!payload.password) {
+        delete payload.password;
+        delete payload.password_two;
+      }
+
+      const path = editingSocioId
+        ? `/admin/users/${editingSocioId}/`
+        : "/admin/users/";
+
+      await request(path, {
+        method: editingSocioId ? "PATCH" : "POST",
+        body: JSON.stringify(payload),
       });
-      setStatus("Socio registrado con éxito en el sistema digital.");
-      setSocioForm({
-        username: "",
-        email: "",
-        password: "",
-        password_two: "",
-        first_name: "",
-        last_name: "",
-        dni_nif: "",
-        telefono: "",
-        numero_socio: "",
-        es_socio: true,
+
+      setStatus(
+        editingSocioId
+          ? "Usuario actualizado correctamente."
+          : "Socio registrado con éxito en el sistema digital."
+      );
+
+      cancelEditingSocio();
+      await loadSocios();
+    } catch (err) {
+      setError(normalizeError(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDeleteSocio(id) {
+    const confirmed = window.confirm(
+      "¿Seguro que quieres borrar este usuario? Esta acción no se puede deshacer."
+    );
+
+    if (!confirmed) return;
+
+    setSaving(true);
+    setError("");
+    setStatus("");
+
+    try {
+      await request(`/admin/users/${id}/`, {
+        method: "DELETE",
       });
+
+      setStatus("Usuario eliminado correctamente.");
+
+      if (editingSocioId === id) {
+        cancelEditingSocio();
+      }
+
       await loadSocios();
     } catch (err) {
       setError(normalizeError(err));
@@ -690,13 +786,19 @@ export default function Home() {
                         const est = reservation.estado || "PENDIENTE";
                         let statusIndicator = "";
                         let pillClass = "reservation-pill";
-                        
+
+                        if (reservation.user_username === currentUser) {
+                          pillClass += " reservation-pill-mine";
+                        }
+
                         if (est === "PENDIENTE") {
-                          statusIndicator = " ⏳";
-                          pillClass += " bg-amber-100 text-amber-900 border border-amber-300 font-medium";
+                          statusIndicator = " ⏳ PENDIENTE";
+                          pillClass += " reservation-pill-pending";
                         } else if (est === "RECHAZADA") {
                           statusIndicator = " ✕";
-                          pillClass += " bg-rose-100 text-rose-900 line-through opacity-50";
+                          pillClass += " reservation-pill-rejected";
+                        } else if (est === "ACEPTADA") {
+                          pillClass += " reservation-pill-accepted";
                         }
 
                         return (
@@ -895,10 +997,21 @@ export default function Home() {
             <h2 className="text-xl font-bold text-slate-950 mb-1">Libro Registro de Socios digital</h2>
             <p className="text-sm text-slate-600 mb-6">Base de datos sincronizada en tiempo real desde Neon. Sustituye las antiguas hojas de cálculo.</p>
             
+            <div className="mb-4">
+              <label className="field">
+                <span>Buscar usuario</span>
+                <input
+                  value={socioSearch}
+                  onChange={(event) => setSocioSearch(event.target.value)}
+                  placeholder="Buscar por nombre, usuario, email, DNI, teléfono o nº de socio"
+                />
+              </label>
+            </div>
+
             {loadingSocios ? <p className="empty">Cargando base de datos de socios...</p> : null}
-            {!loadingSocios && socios.length === 0 ? <p className="empty">No hay ningún usuario registrado.</p> : null}
+            {!loadingSocios && filteredSocios.length === 0 ? <p className="empty">No hay usuarios que coincidan con la búsqueda.</p> : null}
             
-            {!loadingSocios && socios.length > 0 && (
+            {!loadingSocios && filteredSocios.length > 0 && (
               <div className="overflow-x-auto rounded-lg border border-slate-200">
                 <table className="w-full border-collapse text-sm text-slate-900">
                   <thead>
@@ -907,10 +1020,11 @@ export default function Home() {
                       <th className="p-3 font-semibold text-slate-700">DNI / NIF</th>
                       <th className="p-3 font-semibold text-slate-700">Teléfono</th>
                       <th className="p-3 font-semibold text-slate-700">Carnet</th>
+                      <th className="p-3 font-semibold text-slate-700 text-right">Acciones</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200 bg-white">
-                    {socios.map((s) => (
+                    {filteredSocios.map((s) => (
                       <tr key={s.id} className="hover:bg-slate-50/70 transition">
                         <td className="p-3">
                           <div className="font-bold text-slate-900">{s.last_name ? `${s.last_name}, ${s.first_name}` : s.username}</div>
@@ -927,6 +1041,26 @@ export default function Home() {
                             <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded text-xs">No socio</span>
                           )}
                         </td>
+                        <td className="p-3">
+                          <div className="flex justify-end gap-2">
+                            <button
+                              className="icon-action"
+                              type="button"
+                              onClick={() => startEditingSocio(s)}
+                              disabled={saving}
+                            >
+                              Editar
+                            </button>
+                            <button
+                              className="icon-action danger"
+                              type="button"
+                              onClick={() => handleDeleteSocio(s.id)}
+                              disabled={saving}
+                            >
+                              Borrar
+                            </button>
+                          </div>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -937,8 +1071,14 @@ export default function Home() {
 
           {/* FORMULARIO DE PASO DE PAPEL A WEB (POST) */}
           <section className="panel h-fit">
-            <h2 className="text-lg font-bold text-slate-950">➕ Registro Manual (Desde Papel)</h2>
-            <p className="text-sm text-slate-600 mb-4">Utiliza este panel cuando un vecino os entregue la hoja de inscripción física firmada.</p>
+            <h2 className="text-lg font-bold text-slate-950">
+              {editingSocioId ? "✏️ Editar usuario" : "➕ Registro Manual (Desde Papel)"}
+            </h2>
+            <p className="text-sm text-slate-600 mb-4">
+              {editingSocioId
+                ? "Modifica los datos del usuario seleccionado. Deja la contraseña vacía si no quieres cambiarla."
+                : "Utiliza este panel cuando un vecino os entregue la hoja de inscripción física firmada."}
+            </p>
             
             <form className="flex flex-col gap-3" onSubmit={handleCreateSocioSubmit}>
               <label className="field">
@@ -981,8 +1121,25 @@ export default function Home() {
               </div>
               
               <button className="btn btn-primary mt-2" type="submit" disabled={saving}>
-                {saving ? "Registrando en Neon..." : "Guardar en Base de Datos"}
+                {saving
+                  ? editingSocioId
+                    ? "Actualizando..."
+                    : "Registrando en Neon..."
+                  : editingSocioId
+                    ? "Guardar cambios"
+                    : "Guardar en Base de Datos"}
               </button>
+
+              {editingSocioId ? (
+                <button
+                  className="btn btn-secondary"
+                  type="button"
+                  onClick={cancelEditingSocio}
+                  disabled={saving}
+                >
+                  Cancelar edición
+                </button>
+              ) : null}
             </form>
           </section>
         </div>
@@ -1085,7 +1242,15 @@ function ReservationItem({ currentUser, reservation, saving, onDelete, onEdit, i
   const est = reservation.estado || "PENDIENTE";
 
   return (
-    <article className={`reservation-item ${isMine ? "mine" : ""} border-l-4 ${est === "PENDIENTE" ? "border-l-amber-500" : est === "RECHAZADA" ? "border-l-rose-500" : "border-l-emerald-500"}`}>
+    <article
+      className={`reservation-item ${isMine ? "mine" : ""} ${
+        est === "PENDIENTE"
+          ? "reservation-item-pending"
+          : est === "RECHAZADA"
+            ? "reservation-item-rejected"
+            : "reservation-item-accepted"
+      }`}
+    >
       <div className="reservation-time">
         <strong>{TIME_FORMAT.format(start)}</strong>
         <span>{TIME_FORMAT.format(end)}</span>
