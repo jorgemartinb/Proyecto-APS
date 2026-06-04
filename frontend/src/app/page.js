@@ -33,6 +33,7 @@ const FIELD_LABELS = {
   dni_nif: "DNI/NIF",
   telefono: "Teléfono",
   numero_socio: "Número de socio",
+  estado_socio: "Estado de socio",
 };
 const ERROR_TRANSLATIONS = [
   ["No active account found with the given credentials", "No existe una cuenta activa con ese usuario y contraseña."],
@@ -49,6 +50,11 @@ const ERROR_TRANSLATIONS = [
   ["Forbidden", "No tienes permiso para hacer esta acción."],
   ["Not found.", "No se encontró el recurso."],
   ["Bad Request", "Solicitud incorrecta."],
+  ["NO_SOCIO", "No Socio"],
+  ["PENDIENTE", "Solicitud Pendiente"],
+  ["ACEPTADA", "Socio Activo"],
+  ["RECHAZADA", "Solicitud Rechazada"],
+  ["BAJA_SOLICITADA", "Baja Solicitada"],
 ];
 
 function pad(value) {
@@ -190,22 +196,45 @@ export default function Home() {
   const [saving, setSaving] = useState(false);
 
   // 🔑 NUEVOS ESTADOS PARA GESTIÓN DE ROLES Y SOCIOS (Vistas de tu compañero)
-  const [activeTab, setActiveTab] = useState("calendar"); // Opciones: "calendar", "admin_reservations", "admin_socios"
+  const [activeTab, setActiveTab] = useState("calendar"); // Opciones: "calendar", "admin_reservations", "admin_socios", "profile"
   const [socios, setSocios] = useState([]);
   const [loadingSocios, setLoadingSocios] = useState(false);
   const [socioSearch, setSocioSearch] = useState("");
+  const [onlyActiveSocios, setOnlyActiveSocios] = useState(false);
+  const [viewingSocioDetails, setViewingSocioDetails] = useState(null);
   const [editingSocioId, setEditingSocioId] = useState(null);
   const [socioForm, setSocioForm] = useState({
     username: "",
     email: "",
-    password: "",
-    password_two: "",
     first_name: "",
     last_name: "",
     dni_nif: "",
     telefono: "",
     numero_socio: "",
-    es_socio: true,
+    fecha_nacimiento: "",
+    domicilio: "",
+    numero_casa: "",
+    piso: "",
+    letra: "",
+    localidad: "Tres Cantos",
+    codigo_postal: "28760",
+    email_secundario: "",
+    telefono_movil_2: "",
+    titular_cuenta: "",
+    nif_titular: "",
+    iban: "",
+    entidad_bancaria: "",
+    banco_entidad: "",
+    banco_sucursal: "",
+    banco_dc: "",
+    banco_cuenta: "",
+    familiares: [],
+    es_socio_otras_asoc: false,
+    cuales_otras_asoc: "",
+    autoriza_imagenes: false,
+    recibo_anual_pagado: false,
+    fecha_pago_recibo: "",
+    estado_socio: "NO_SOCIO",
   });
 
   // Identificador de Admin basado en el backend de Django (is_staff)
@@ -328,7 +357,7 @@ export default function Home() {
 
   // Disparador para refrescar socios al entrar a su pestaña
   useEffect(() => {
-    if (activeTab === "admin_socios") {
+    if (activeTab === "admin_socios" || activeTab === "admin_reservations") {
       void loadSocios();
     }
   }, [activeTab, loadSocios]);
@@ -343,11 +372,18 @@ export default function Home() {
   );
 
   const filteredSocios = useMemo(() => {
+    let result = socios;
+
+    // 1. Filtrar por socios activos si el checkbox está marcado
+    if (onlyActiveSocios) {
+      result = result.filter((s) => s.estado_socio === "ACEPTADA");
+    }
+
     const term = socioSearch.trim().toLowerCase();
+    if (!term) return result;
 
-    if (!term) return socios;
-
-    return socios.filter((socio) => {
+    // 2. Filtrar sobre el resultado previo usando el término de búsqueda
+    return result.filter((socio) => {
       const text = [
         socio.username,
         socio.email,
@@ -363,7 +399,7 @@ export default function Home() {
 
       return text.includes(term);
     });
-  }, [socioSearch, socios]);
+  }, [socioSearch, socios, onlyActiveSocios]);
   const upcomingReservations = useMemo(
     () => reservations.filter((reservation) => new Date(reservation.end_time) >= new Date() && reservation.estado !== "RECHAZADA").slice(0, 6),
     [reservations],
@@ -486,6 +522,38 @@ export default function Home() {
     }
   }
 
+  async function handleDelete(id) {
+    setSaving(true);
+    setError("");
+    setStatus("");
+
+    try {
+      await request(`/reservations/${id}/`, { method: "DELETE" });
+      await loadReservations();
+      if (editingId === id) setEditingId(null);
+      setStatus("Reserva eliminada.");
+    } catch (err) {
+      setError(normalizeError(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleSolicitarBaja() {
+    if (!window.confirm("¿Estás seguro de que quieres solicitar tu baja como socio?")) return;
+    setSaving(true);
+    try {
+      await request("/user/request-baja/", { method: "POST" });
+      setStatus("Solicitud de baja enviada. El administrador la procesará pronto.");
+      const refreshed = await loadProfile(auth);
+      updateAuth(refreshed);
+    } catch (err) {
+      setError(normalizeError(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
   // 👑 NUEVA ACCIÓN: CAMBIAR ESTADO DESDE EL DASHBOARD DE ADMIN (Aprobar / Rechazar)
   async function handleUpdateStatus(id, nuevoEstado) {
     setSaving(true);
@@ -508,18 +576,9 @@ export default function Home() {
   // 👥 ACCIONES DE ADMIN PARA GESTIONAR USUARIOS / SOCIOS
   function startEditingSocio(socio) {
     setEditingSocioId(socio.id);
-    setSocioForm({
-      username: socio.username || "",
-      email: socio.email || "",
-      password: "",
-      password_two: "",
-      first_name: socio.first_name || "",
-      last_name: socio.last_name || "",
-      dni_nif: socio.dni_nif || "",
-      telefono: socio.telefono || "",
-      numero_socio: socio.numero_socio || "",
-      es_socio: Boolean(socio.es_socio),
-    });
+    setSocioForm({ ...socio });
+    // Hacemos scroll suave hacia el formulario
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   function cancelEditingSocio() {
@@ -527,14 +586,35 @@ export default function Home() {
     setSocioForm({
       username: "",
       email: "",
-      password: "",
-      password_two: "",
       first_name: "",
       last_name: "",
       dni_nif: "",
       telefono: "",
       numero_socio: "",
-      es_socio: true,
+      fecha_nacimiento: "",
+      domicilio: "",
+      numero_casa: "",
+      piso: "",
+      letra: "",
+      localidad: "Tres Cantos",
+      codigo_postal: "28760",
+      email_secundario: "",
+      telefono_movil_2: "",
+      titular_cuenta: "",
+      nif_titular: "",
+      iban: "",
+      entidad_bancaria: "",
+      banco_entidad: "",
+      banco_sucursal: "",
+      banco_dc: "",
+      banco_cuenta: "",
+      familiares: [],
+      es_socio_otras_asoc: false,
+      cuales_otras_asoc: "",
+      autoriza_imagenes: false,
+      recibo_anual_pagado: false,
+      fecha_pago_recibo: "",
+      estado_socio: "NO_SOCIO",
     });
   }
 
@@ -545,15 +625,33 @@ export default function Home() {
     setStatus("");
 
     try {
-      const payload = {
-        ...socioForm,
-        password_two: socioForm.password,
-      };
-
-      if (!payload.password) {
-        delete payload.password;
-        delete payload.password_two;
+      const formData = new FormData(event.target);
+      const data = Object.fromEntries(formData);
+      
+      // Procesamos campos especiales (Checkboxes y JSON)
+      data.es_socio = true; 
+      if (!data.estado_socio) {
+        data.estado_socio = editingSocioId ? socioForm.estado_socio : 'ACEPTADA';
       }
+      data.autoriza_imagenes = formData.get("autoriza_imagenes") === "on";
+      data.es_socio_otras_asoc = formData.get("es_socio_otras_asoc") === "on";
+      data.recibo_anual_pagado = formData.get("recibo_anual_pagado") === "on";
+
+      const familiares = [];
+      for (let i = 1; i <= 5; i++) {
+        const nombre = formData.get(`fam_nombre_${i}`);
+        if (nombre) {
+          familiares.push({
+            nombre,
+            apellidos: formData.get(`fam_apellidos_${i}`),
+            nif: formData.get(`fam_nif_${i}`),
+            fnac: formData.get(`fam_fnac_${i}`)
+          });
+        }
+      }
+      data.familiares = familiares;
+
+      const payload = { ...data };
 
       const path = editingSocioId
         ? `/admin/users/${editingSocioId}/`
@@ -602,23 +700,6 @@ export default function Home() {
       }
 
       await loadSocios();
-    } catch (err) {
-      setError(normalizeError(err));
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function handleDelete(id) {
-    setSaving(true);
-    setError("");
-    setStatus("");
-
-    try {
-      await request(`/reservations/${id}/`, { method: "DELETE" });
-      await loadReservations();
-      if (editingId === id) setEditingId(null);
-      setStatus("Reserva eliminada.");
     } catch (err) {
       setError(normalizeError(err));
     } finally {
@@ -689,7 +770,7 @@ export default function Home() {
       </section>
 
       {/* 👑 BARRA DE PESTAÑAS MÁGICA PARA ADMINISTRADORES */}
-      {isAdmin && (
+      {auth && (
         <section className="bg-white border-b border-slate-200">
           <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8">
             <div className="flex gap-4">
@@ -697,16 +778,24 @@ export default function Home() {
                 className={`py-3 px-1 font-semibold text-sm border-b-2 transition ${activeTab === "calendar" ? "border-emerald-600 text-emerald-700" : "border-transparent text-slate-500 hover:text-slate-800"}`}
                 onClick={() => setActiveTab("calendar")}
               >
-                📅 Ver Calendario General
+                📅 Calendario
               </button>
+              <button
+                className={`py-3 px-1 font-semibold text-sm border-b-2 transition ${activeTab === "profile" ? "border-emerald-600 text-emerald-700" : "border-transparent text-slate-500 hover:text-slate-800"}`}
+                onClick={() => setActiveTab("profile")}
+              >
+                👤 Mi Perfil
+              </button>
+              {isAdmin && (
+                <>
               <button
                 className={`py-3 px-1 font-semibold text-sm border-b-2 transition relative ${activeTab === "admin_reservations" ? "border-emerald-600 text-emerald-700" : "border-transparent text-slate-500 hover:text-slate-800"}`}
                 onClick={() => setActiveTab("admin_reservations")}
               >
-                ⏳ Validar Solicitudes
-                {reservations.filter((r) => r.estado === "PENDIENTE").length > 0 && (
+                ⏳ Solicitudes Pendientes
+                {(reservations.filter((r) => r.estado === "PENDIENTE").length + socios.filter((s) => s.estado_socio === "PENDIENTE").length) > 0 && (
                   <span className="ml-2 bg-amber-500 text-white text-xs px-1.5 py-0.5 rounded-full font-bold">
-                    {reservations.filter((r) => r.estado === "PENDIENTE").length}
+                    {reservations.filter((r) => r.estado === "PENDIENTE").length + socios.filter((s) => s.estado_socio === "PENDIENTE").length}
                   </span>
                 )}
               </button>
@@ -716,6 +805,8 @@ export default function Home() {
               >
                 👥 Libro Registro de Socios
               </button>
+                </>
+              )}
             </div>
           </div>
         </section>
@@ -950,8 +1041,8 @@ export default function Home() {
       {/* VISTA 2: BANDEJA DE VALIDACIÓN (Exclusivo Administradores)*/}
       {/* ======================================================== */}
       {activeTab === "admin_reservations" && (
-        <div className="mx-auto w-full max-w-7xl px-4 py-5 sm:px-6 lg:px-8">
-          <div className="panel">
+        <div className="mx-auto w-full max-w-7xl px-4 py-5 sm:px-6 lg:px-8 space-y-8">
+          <section className="panel">
             <h2 className="text-xl font-bold text-slate-950 mb-2">Solicitudes de Reserva Pendientes</h2>
             <p className="text-sm text-slate-600 mb-6">Aquí se listan los huecos que los vecinos han pedido pero aún no están aprobados oficialmente.</p>
             
@@ -983,6 +1074,205 @@ export default function Home() {
                 ))}
               </div>
             )}
+          </section>
+
+          <section className="panel">
+            <h2 className="text-xl font-bold text-slate-950 mb-2">Solicitudes de Nuevo Socio</h2>
+            <p className="text-sm text-slate-600 mb-6">Vecinos que han completado su ficha y esperan validación administrativa.</p>
+            
+            {socios.filter((s) => s.estado_socio === "PENDIENTE").length === 0 ? (
+              <p className="text-center py-8 text-slate-500 font-medium bg-slate-50 border border-dashed rounded-lg">
+                🎉 ¡Todo al día! No hay nuevas solicitudes de alta como socio.
+              </p>
+            ) : (
+              <div className="flex flex-col gap-4">
+                {socios.filter((s) => s.estado_socio === "PENDIENTE").map((s) => (
+                  <div key={s.id} className="bg-white border border-emerald-200 rounded-xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm hover:border-emerald-300 transition">
+                    <div>
+                      <span className="bg-emerald-100 text-emerald-800 text-xs px-2 py-0.5 rounded font-semibold uppercase tracking-wide">Alta Solicitada</span>
+                      <h3 className="font-bold text-slate-900 text-lg mt-1">{s.last_name ? `${s.last_name}, ${s.first_name}` : s.first_name || s.username}</h3>
+                      <p className="text-sm text-slate-600">Usuario: <span className="font-semibold text-slate-800">@{s.username}</span> | Email: {s.email}</p>
+                      <p className="text-sm text-emerald-800 font-medium mt-2">DNI: {s.dni_nif} | Tel: {s.telefono}</p>
+                    </div>
+                    <div className="flex flex-wrap sm:flex-col gap-2 shrink-0">
+                      <button className="bg-slate-100 text-slate-700 border border-slate-200 px-4 py-2 rounded-lg font-semibold text-sm hover:bg-slate-200 transition" onClick={() => setViewingSocioDetails(s)}>
+                        Ver Ficha Completa
+                      </button>
+                      <button className="bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold text-sm hover:bg-emerald-700 shadow-sm transition" onClick={async () => {
+                        await request(`/admin/users/${s.id}/`, { method: "PATCH", body: JSON.stringify({ estado_socio: 'ACEPTADA' }) });
+                        await loadSocios();
+                        setStatus(`Socio @${s.username} aprobado.`);
+                      }} disabled={saving}>
+                        Aprobar Socio
+                      </button>
+                      <button className="bg-rose-50 text-rose-700 border border-rose-200 px-4 py-2 rounded-lg font-semibold text-sm hover:bg-rose-100 transition" onClick={async () => {
+                        if (confirm(`¿Rechazar solicitud de @${s.username}?`)) {
+                          await request(`/admin/users/${s.id}/`, { method: "PATCH", body: JSON.stringify({ estado_socio: 'RECHAZADA' }) });
+                          await loadSocios();
+                        }
+                      }} disabled={saving}>
+                        Rechazar
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* VISTA: MI PERFIL / SOLICITUD DE SOCIO */}
+      {/* ======================================================== */}
+      {activeTab === "profile" && (
+        <div className="mx-auto w-full max-w-7xl px-4 py-5 sm:px-6 lg:px-8">
+          <div className="grid gap-5 lg:grid-cols-2">
+            <section className="panel">
+              <h2 className="text-xl font-bold text-slate-950 mb-4">Membresía</h2>
+              <div className="flex flex-col gap-4">
+                <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
+                  <div className="flex justify-between items-start mb-2">
+                    <span className="text-xs font-bold uppercase text-slate-500">Estado Actual</span>
+                    <span className={`text-xs px-2 py-1 rounded font-bold ${
+                      auth.profile?.estado_socio === 'ACEPTADA' ? 'bg-emerald-100 text-emerald-800' :
+                      auth.profile?.estado_socio === 'PENDIENTE' ? 'bg-amber-100 text-amber-800' :
+                      'bg-slate-200 text-slate-700'
+                    }`}>
+                      {translateText(auth.profile?.estado_socio)}
+                    </span>
+                  </div>
+                  <p className="text-slate-900 font-medium">@{auth.profile?.username}</p>
+                  {auth.profile?.numero_socio && (
+                    <p className="mt-2 text-emerald-700 font-bold">Número de Socio: {auth.profile.numero_socio}</p>
+                  )}
+                </div>
+
+                {auth.profile?.estado_socio === 'ACEPTADA' && (
+                  <button className="btn btn-secondary text-rose-600 border-rose-200 hover:bg-rose-50" onClick={handleSolicitarBaja} disabled={saving}>
+                    Solicitar Baja del Centro
+                  </button>
+                )}
+              </div>
+            </section>
+
+            <form className="lg:col-span-2 space-y-6" onSubmit={async (e) => {
+              e.preventDefault();
+              setSaving(true);
+              try {
+                const formData = new FormData(e.target);
+                const data = Object.fromEntries(formData);
+                
+                // Construimos el array de familiares desde los inputs dinámicos
+                const familiares = [];
+                for (let i = 1; i <= 5; i++) {
+                  const nombre = formData.get(`fam_nombre_${i}`);
+                  if (nombre) {
+                    familiares.push({
+                      nombre,
+                      apellidos: formData.get(`fam_apellidos_${i}`),
+                      nif: formData.get(`fam_nif_${i}`),
+                      fnac: formData.get(`fam_fnac_${i}`)
+                    });
+                  }
+                }
+                data.familiares = familiares;
+                data.autoriza_imagenes = formData.get("autoriza_imagenes") === "on";
+                data.es_socio_otras_asoc = formData.get("es_socio_otras_asoc") === "on";
+
+                await request("/user/profile/", { method: "PUT", body: JSON.stringify(data) });
+                const session = await loadProfile(auth);
+                updateAuth(session);
+                setStatus("Ficha de socio actualizada correctamente.");
+              } catch (err) { setError(normalizeError(err)); } finally { setSaving(false); }
+            }}>
+              <div className="grid gap-6 lg:grid-cols-2">
+                <section className="panel">
+                  <h3 className="font-bold text-lg mb-4 flex items-center gap-2">📋 1. Datos Personales</h3>
+                  <div className="grid grid-cols-2 gap-3">
+                    <label className="field"><span>Nombre</span><input name="first_name" defaultValue={auth.profile?.first_name} required /></label>
+                    <label className="field"><span>Apellidos</span><input name="last_name" defaultValue={auth.profile?.last_name} required /></label>
+                    <label className="field"><span>NIF (DNI/NIE)</span><input name="dni_nif" defaultValue={auth.profile?.dni_nif} required /></label>
+                    <label className="field"><span>Fecha Nacimiento</span><input type="date" name="fecha_nacimiento" defaultValue={auth.profile?.fecha_nacimiento} /></label>
+                  </div>
+                  <div className="mt-3 grid grid-cols-4 gap-3">
+                    <label className="field col-span-2"><span>Calle/Vía</span><input name="domicilio" defaultValue={auth.profile?.domicilio} /></label>
+                    <label className="field"><span>Nº</span><input name="numero_casa" defaultValue={auth.profile?.numero_casa} /></label>
+                    <label className="field"><span>Piso/Letra</span><input name="piso" placeholder="2º B" defaultValue={auth.profile?.piso} /></label>
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-3">
+                    <label className="field"><span>Email Principal</span><input type="email" name="email" defaultValue={auth.profile?.email} required /></label>
+                    <label className="field"><span>Teléfono Principal</span><input name="telefono" defaultValue={auth.profile?.telefono} required /></label>
+                  </div>
+                </section>
+
+                <section className="panel">
+                  <h3 className="font-bold text-lg mb-4 flex items-center gap-2">💳 2. Datos Bancarios</h3>
+                  <div className="grid gap-3">
+                    <label className="field"><span>Titular Cuenta</span><input name="titular_cuenta" defaultValue={auth.profile?.titular_cuenta} /></label>
+                    <label className="field"><span>IBAN Completo</span><input name="iban" defaultValue={auth.profile?.iban} placeholder="ES00 0000..." /></label>
+                    <div className="grid grid-cols-4 gap-2 bg-slate-50 p-2 rounded border border-dashed border-slate-300">
+                      <label className="field"><span>Entidad</span><input name="banco_entidad" maxLength="4" defaultValue={auth.profile?.banco_entidad} /></label>
+                      <label className="field"><span>Sucursal</span><input name="banco_sucursal" maxLength="4" defaultValue={auth.profile?.banco_sucursal} /></label>
+                      <label className="field"><span>DC</span><input name="banco_dc" maxLength="2" defaultValue={auth.profile?.banco_dc} /></label>
+                      <label className="field"><span>Nº Cuenta</span><input name="banco_cuenta" maxLength="10" defaultValue={auth.profile?.banco_cuenta} /></label>
+                    </div>
+                  </div>
+                </section>
+
+                <section className="panel lg:col-span-2">
+                  <h3 className="font-bold text-lg mb-4 flex items-center gap-2">👥 3. Cuota Familiar (Hasta 5 adicionales)</h3>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="text-left text-slate-500 uppercase text-[10px] tracking-wider">
+                          <th className="pb-2">Nombre</th>
+                          <th className="pb-2">Apellidos</th>
+                          <th className="pb-2">NIF</th>
+                          <th className="pb-2">Fecha Nac.</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {[1, 2, 3, 4, 5].map((idx) => {
+                          const fam = auth.profile?.familiares?.[idx - 1] || {};
+                          return (
+                            <tr key={idx}>
+                              <td className="py-1 pr-2"><input name={`fam_nombre_${idx}`} defaultValue={fam.nombre} className="w-full text-xs p-1 border rounded" /></td>
+                              <td className="py-1 pr-2"><input name={`fam_apellidos_${idx}`} defaultValue={fam.apellidos} className="w-full text-xs p-1 border rounded" /></td>
+                              <td className="py-1 pr-2"><input name={`fam_nif_${idx}`} defaultValue={fam.nif} className="w-full text-xs p-1 border rounded" /></td>
+                              <td className="py-1"><input type="date" name={`fam_fnac_${idx}`} defaultValue={fam.fnac} className="w-full text-xs p-1 border rounded" /></td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+
+                <section className="panel lg:col-span-2">
+                  <h3 className="font-bold text-lg mb-4 flex items-center gap-2">🔍 4. Información y Autorizaciones</h3>
+                  <div className="space-y-4">
+                    <div className="flex items-start gap-3">
+                      <input type="checkbox" id="es_socio_otras_asoc" name="es_socio_otras_asoc" defaultChecked={auth.profile?.es_socio_otras_asoc} className="mt-1" />
+                      <label htmlFor="es_socio_otras_asoc" className="text-sm">¿Eres socio de alguna otra asociación de Tres Cantos?</label>
+                    </div>
+                    <label className="field"><span>Indica cuáles</span><input name="cuales_otras_asoc" defaultValue={auth.profile?.cuales_otras_asoc} placeholder="Ej: Cruz Roja, ARBA..." /></label>
+                    <hr />
+                    <div className="flex items-start gap-3 bg-emerald-50 p-3 rounded border border-emerald-100">
+                      <input type="checkbox" id="autoriza_imagenes" name="autoriza_imagenes" defaultChecked={auth.profile?.autoriza_imagenes} className="mt-1" required />
+                      <label htmlFor="autoriza_imagenes" className="text-xs text-emerald-900 leading-relaxed">
+                        <b>Autorización de Imágenes:</b> Doy mi consentimiento para la publicación de fotos/videos de las actividades de la asociación donde aparezca en la web y redes sociales de la entidad.
+                      </label>
+                    </div>
+                  </div>
+                </section>
+              </div>
+              <div className="flex justify-end">
+                <button className="btn btn-primary px-12 py-3 text-lg" type="submit" disabled={saving}>
+                  {saving ? "Guardando..." : "Guardar y Tramitar Alta como Socio"}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
@@ -991,14 +1281,14 @@ export default function Home() {
       {/* VISTA 3: LIBRO DE SOCIOS / EXCEL (Exclusivo Administradores)*/}
       {/* ======================================================== */}
       {activeTab === "admin_socios" && (
-        <div className="mx-auto w-full max-w-7xl px-4 py-5 sm:px-6 grid gap-5 lg:grid-cols-[minmax(0,1fr)_400px] lg:px-8">
+        <div className="mx-auto w-full max-w-7xl px-4 py-5 sm:px-6 space-y-8 lg:px-8">
           {/* TABLA PRINCIPAL DE SOCIOS (GET) */}
           <section className="panel">
             <h2 className="text-xl font-bold text-slate-950 mb-1">Libro Registro de Socios digital</h2>
-            <p className="text-sm text-slate-600 mb-6">Base de datos sincronizada en tiempo real desde Neon. Sustituye las antiguas hojas de cálculo.</p>
+            <p className="text-sm text-slate-600 mb-6">Listado completo de la base de datos de la asociación.</p>
             
-            <div className="mb-4">
-              <label className="field">
+            <div className="mb-6 flex flex-col sm:flex-row sm:items-end gap-6">
+              <label className="field max-w-md">
                 <span>Buscar usuario</span>
                 <input
                   value={socioSearch}
@@ -1006,20 +1296,34 @@ export default function Home() {
                   placeholder="Buscar por nombre, usuario, email, DNI, teléfono o nº de socio"
                 />
               </label>
+              <div className="flex items-center gap-2 pb-2">
+                <input
+                  type="checkbox"
+                  id="filterActive"
+                  className="w-4 h-4 accent-emerald-600 cursor-pointer"
+                  checked={onlyActiveSocios}
+                  onChange={(e) => setOnlyActiveSocios(e.target.checked)}
+                />
+                <label htmlFor="filterActive" className="text-sm font-semibold text-slate-700 cursor-pointer select-none">
+                  Ver solo socios activos
+                </label>
+              </div>
             </div>
 
             {loadingSocios ? <p className="empty">Cargando base de datos de socios...</p> : null}
             {!loadingSocios && filteredSocios.length === 0 ? <p className="empty">No hay usuarios que coincidan con la búsqueda.</p> : null}
             
             {!loadingSocios && filteredSocios.length > 0 && (
-              <div className="overflow-x-auto rounded-lg border border-slate-200">
+              <div className="overflow-x-auto overflow-y-auto max-h-[600px] rounded-lg border border-slate-200 shadow-inner bg-slate-50/30">
                 <table className="w-full border-collapse text-sm text-slate-900">
-                  <thead>
-                    <tr className="bg-slate-100 text-left border-b border-slate-200">
+                  <thead className="sticky top-0 z-10 bg-slate-100">
+                    <tr className="text-left border-b border-slate-200">
                       <th className="p-3 font-semibold text-slate-700">Socio / Datos de acceso</th>
                       <th className="p-3 font-semibold text-slate-700">DNI / NIF</th>
                       <th className="p-3 font-semibold text-slate-700">Teléfono</th>
-                      <th className="p-3 font-semibold text-slate-700">Carnet</th>
+                      <th className="p-3 font-semibold text-slate-700">Estado / Nº</th>
+                      <th className="p-3 font-semibold text-slate-700">Recibo</th>
+                      <th className="p-3 font-semibold text-slate-700">F. Pago</th>
                       <th className="p-3 font-semibold text-slate-700 text-right">Acciones</th>
                     </tr>
                   </thead>
@@ -1033,16 +1337,54 @@ export default function Home() {
                         <td className="p-3 text-slate-700 font-mono">{s.dni_nif || "—"}</td>
                         <td className="p-3 text-slate-700">{s.telefono || "—"}</td>
                         <td className="p-3">
-                          {s.es_socio ? (
-                            <span className="bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded text-xs">
-                              Nº {s.numero_socio || "Asig."}
+                          <div className="flex flex-col gap-1">
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold w-fit ${
+                              s.estado_socio === 'ACEPTADA' ? 'bg-emerald-100 text-emerald-800' :
+                              s.estado_socio === 'PENDIENTE' ? 'bg-amber-100 text-amber-800' :
+                              s.estado_socio === 'BAJA_SOLICITADA' ? 'bg-rose-100 text-rose-800' :
+                              'bg-slate-200 text-slate-700'
+                            }`}>
+                              {translateText(s.estado_socio)}
                             </span>
-                          ) : (
-                            <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded text-xs">No socio</span>
-                          )}
+                            {s.es_socio && <span className="text-xs font-bold text-slate-600">Nº {s.numero_socio || "..."}</span>}
+                          </div>
                         </td>
                         <td className="p-3">
-                          <div className="flex justify-end gap-2">
+                          {s.recibo_anual_pagado ? (
+                            <span className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full text-[10px] font-bold">PAGADO</span>
+                          ) : (
+                            <span className="bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full text-[10px] font-bold">PENDIENTE</span>
+                          )}
+                        </td>
+                        <td className="p-3 text-slate-600 text-xs font-medium">
+                          {s.fecha_pago_recibo || "—"}
+                        </td>
+                        <td className="p-3">
+                          <div className="flex flex-col items-end gap-1">
+                            {s.estado_socio === 'PENDIENTE' && (
+                              <button className="text-[10px] bg-emerald-600 text-white px-2 py-1 rounded hover:bg-emerald-700" onClick={async () => {
+                                await request(`/admin/users/${s.id}/`, { method: "PATCH", body: JSON.stringify({ estado_socio: 'ACEPTADA' }) });
+                                await loadSocios();
+                              }}>Aprobar Socio</button>
+                            )}
+                            {s.estado_socio === 'BAJA_SOLICITADA' && (
+                              <button className="text-[10px] bg-rose-600 text-white px-2 py-1 rounded hover:bg-rose-700" onClick={async () => {
+                                if (confirm("¿Tramitar baja definitiva?")) {
+                                  await request(`/admin/users/${s.id}/`, { method: "PATCH", body: JSON.stringify({ estado_socio: 'NO_SOCIO' }) });
+                                  await loadSocios();
+                                }
+                              }}>Tramitar Baja</button>
+                            )}
+                            <div className="flex gap-2">
+                            {s.estado_socio === 'ACEPTADA' && (
+                              <button className="icon-action danger" type="button" onClick={async () => {
+                                if (confirm(`¿Dar de baja manualmente al socio @${s.username}?`)) {
+                                  await request(`/admin/users/${s.id}/`, { method: "PATCH", body: JSON.stringify({ estado_socio: 'NO_SOCIO' }) });
+                                  await loadSocios();
+                                  setStatus(`Baja tramitada para @${s.username}`);
+                                }
+                              }} disabled={saving}>Baja</button>
+                            )}
                             <button
                               className="icon-action"
                               type="button"
@@ -1060,6 +1402,7 @@ export default function Home() {
                               Borrar
                             </button>
                           </div>
+                        </div>
                         </td>
                       </tr>
                     ))}
@@ -1070,78 +1413,250 @@ export default function Home() {
           </section>
 
           {/* FORMULARIO DE PASO DE PAPEL A WEB (POST) */}
-          <section className="panel h-fit">
-            <h2 className="text-lg font-bold text-slate-950">
-              {editingSocioId ? "✏️ Editar usuario" : "➕ Registro Manual (Desde Papel)"}
-            </h2>
-            <p className="text-sm text-slate-600 mb-4">
-              {editingSocioId
-                ? "Modifica los datos del usuario seleccionado. Deja la contraseña vacía si no quieres cambiarla."
-                : "Utiliza este panel cuando un vecino os entregue la hoja de inscripción física firmada."}
-            </p>
+          <section className="panel">
+            <div className="flex justify-between items-start mb-6">
+              <div>
+                <h2 className="text-xl font-bold text-slate-950">
+                  {editingSocioId ? "✏️ Editando Ficha de Usuario" : "➕ Registro Manual (Desde Papel)"}
+                </h2>
+                <p className="text-sm text-slate-600">
+                  {editingSocioId
+                    ? `Modificando datos de @${socioForm.username}`
+                    : "Vuelca aquí los datos de la hoja de inscripción física entregada por el vecino."}
+                </p>
+              </div>
+              {editingSocioId && (
+                <button className="btn btn-secondary" onClick={cancelEditingSocio}>Cancelar Edición</button>
+              )}
+            </div>
             
-            <form className="flex flex-col gap-3" onSubmit={handleCreateSocioSubmit}>
-              <label className="field">
-                <span>Usuario (Para iniciar sesión)</span>
-                <input required value={socioForm.username} onChange={(e) => setSocioForm(c => ({...c, username: e.target.value}))} placeholder="ej: javier92" />
-              </label>
-              <label className="field">
-                <span>Email oficial</span>
-                <input type="email" required value={socioForm.email} onChange={(e) => setSocioForm(c => ({...c, email: e.target.value}))} placeholder="vecino@correo.com" />
-              </label>
-              <div className="grid grid-cols-2 gap-2">
-                <label className="field">
-                  <span>Nombre</span>
-                  <input required value={socioForm.first_name} onChange={(e) => setSocioForm(c => ({...c, first_name: e.target.value}))} placeholder="Javier" />
-                </label>
-                <label className="field">
-                  <span>Apellidos</span>
-                  <input required value={socioForm.last_name} onChange={(e) => setSocioForm(c => ({...c, last_name: e.target.value}))} placeholder="García López" />
-                </label>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <label className="field">
-                  <span>DNI / NIF</span>
-                  <input required value={socioForm.dni_nif} onChange={(e) => setSocioForm(c => ({...c, dni_nif: e.target.value}))} placeholder="12345678X" />
-                </label>
-                <label className="field">
-                  <span>Teléfono</span>
-                  <input required value={socioForm.telefono} onChange={(e) => setSocioForm(c => ({...c, telefono: e.target.value}))} placeholder="600123456" />
-                </label>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <label className="field">
-                  <span>Número de Socio</span>
-                  <input value={socioForm.numero_socio} onChange={(e) => setSocioForm(c => ({...c, numero_socio: e.target.value}))} placeholder="S-241" />
-                </label>
-                <label className="field">
-                  <span>Contraseña inicial</span>
-                  <input type="password" required value={socioForm.password} onChange={(e) => setSocioForm(c => ({...c, password: e.target.value}))} placeholder="••••••••" />
-                </label>
-              </div>
-              
-              <button className="btn btn-primary mt-2" type="submit" disabled={saving}>
-                {saving
-                  ? editingSocioId
-                    ? "Actualizando..."
-                    : "Registrando en Neon..."
-                  : editingSocioId
-                    ? "Guardar cambios"
-                    : "Guardar en Base de Datos"}
-              </button>
+            <form key={editingSocioId || 'new'} className="space-y-6" onSubmit={handleCreateSocioSubmit}>
+              <div className="grid gap-6 lg:grid-cols-3">
+                {/* Bloque: Datos de Acceso */}
+                <div className="space-y-3">
+                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Acceso y Sistema</h3>
+                  <label className="field"><span>Usuario</span><input name="username" defaultValue={socioForm.username} required placeholder="ej: javier92" /></label>
+                  <label className="field"><span>Email Oficial</span><input name="email" type="email" defaultValue={socioForm.email} required placeholder="vecino@correo.com" /></label>
+                  <label className="field"><span>Número Socio (Opcional)</span><input name="numero_socio" defaultValue={socioForm.numero_socio} placeholder="Automático si se deja vacío" /></label>
+                  <label className="field">
+                    <span>Estado del Socio</span>
+                    <select name="estado_socio" key={socioForm.estado_socio} defaultValue={socioForm.estado_socio} className="w-full p-2 border rounded bg-white text-sm">
+                      <option value="NO_SOCIO">No Socio / Baja</option>
+                      <option value="PENDIENTE">Solicitud Pendiente</option>
+                      <option value="ACEPTADA">Socio Activo</option>
+                      <option value="RECHAZADA">Solicitud Rechazada</option>
+                      <option value="BAJA_SOLICITADA">Baja Solicitada</option>
+                    </select>
+                  </label>
+                </div>
 
-              {editingSocioId ? (
-                <button
-                  className="btn btn-secondary"
-                  type="button"
-                  onClick={cancelEditingSocio}
-                  disabled={saving}
-                >
-                  Cancelar edición
+                {/* Bloque: Personales */}
+                <div className="lg:col-span-2 grid grid-cols-2 gap-3">
+                  <h3 className="col-span-2 text-xs font-bold text-slate-400 uppercase tracking-wider">📋 1. Datos Personales</h3>
+                  <label className="field"><span>Nombre</span><input name="first_name" defaultValue={socioForm.first_name} required /></label>
+                  <label className="field"><span>Apellidos</span><input name="last_name" defaultValue={socioForm.last_name} required /></label>
+                  <label className="field"><span>DNI / NIF</span><input name="dni_nif" defaultValue={socioForm.dni_nif} required /></label>
+                  <label className="field"><span>Fecha Nacimiento</span><input type="date" name="fecha_nacimiento" defaultValue={socioForm.fecha_nacimiento} /></label>
+                  <label className="field col-span-2"><span>Calle/Vía</span><input name="domicilio" defaultValue={socioForm.domicilio} /></label>
+                  <div className="grid grid-cols-3 gap-2 col-span-2">
+                    <label className="field"><span>Nº</span><input name="numero_casa" defaultValue={socioForm.numero_casa} /></label>
+                    <label className="field"><span>Piso</span><input name="piso" defaultValue={socioForm.piso} /></label>
+                    <label className="field"><span>Letra</span><input name="letra" defaultValue={socioForm.letra} /></label>
+                  </div>
+                  <label className="field"><span>Teléfono Principal</span><input name="telefono" defaultValue={socioForm.telefono} required /></label>
+                  <label className="field"><span>Teléfono 2</span><input name="telefono_movil_2" defaultValue={socioForm.telefono_movil_2} /></label>
+                </div>
+
+                {/* Bloque: Bancarios */}
+                <div className="lg:col-span-3 grid lg:grid-cols-2 gap-6 bg-slate-50 p-4 rounded-xl border border-slate-200">
+                  <div className="space-y-3">
+                    <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">💳 2. Datos Bancarios</h3>
+                    <label className="field"><span>Titular Cuenta</span><input name="titular_cuenta" defaultValue={socioForm.titular_cuenta} /></label>
+                    <label className="field"><span>IBAN Completo</span><input name="iban" defaultValue={socioForm.iban} placeholder="ES00 0000..." /></label>
+                  </div>
+                  <div className="space-y-3">
+                    <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Desglose tradicional</h3>
+                    <div className="grid grid-cols-4 gap-2">
+                      <label className="field"><span>Entidad</span><input name="banco_entidad" maxLength="4" defaultValue={socioForm.banco_entidad} /></label>
+                      <label className="field"><span>Sucursal</span><input name="banco_sucursal" maxLength="4" defaultValue={socioForm.banco_sucursal} /></label>
+                      <label className="field"><span>DC</span><input name="banco_dc" maxLength="2" defaultValue={socioForm.banco_dc} /></label>
+                      <label className="field"><span>Nº Cuenta</span><input name="banco_cuenta" maxLength="10" defaultValue={socioForm.banco_cuenta} /></label>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Bloque: Familiares */}
+                <div className="lg:col-span-2 space-y-3">
+                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">👥 3. Cuota Familiar</h3>
+                  <div className="overflow-x-auto border rounded-lg">
+                    <table className="w-full text-xs">
+                      <thead className="bg-slate-50 border-b">
+                        <tr className="text-left text-slate-500 uppercase text-[9px]">
+                          <th className="p-2">Nombre</th>
+                          <th className="p-2">Apellidos</th>
+                          <th className="p-2">NIF</th>
+                          <th className="p-2">Fecha Nac.</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {[1, 2, 3, 4, 5].map((idx) => {
+                          const fam = socioForm.familiares?.[idx - 1] || {};
+                          return (
+                            <tr key={idx}>
+                              <td className="p-1"><input name={`fam_nombre_${idx}`} defaultValue={fam.nombre} className="w-full p-1 border rounded" /></td>
+                              <td className="p-1"><input name={`fam_apellidos_${idx}`} defaultValue={fam.apellidos} className="w-full p-1 border rounded" /></td>
+                              <td className="p-1"><input name={`fam_nif_${idx}`} defaultValue={fam.nif} className="w-full p-1 border rounded" /></td>
+                              <td className="p-1"><input type="date" name={`fam_fnac_${idx}`} defaultValue={fam.fnac} className="w-full p-1 border rounded" /></td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Bloque: Autorizaciones */}
+                <div className="space-y-4">
+                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">🔍 4. Otros y Firmas</h3>
+                  <div className="flex items-start gap-2">
+                    <input type="checkbox" id="es_socio_otras_asoc" name="es_socio_otras_asoc" defaultChecked={socioForm.es_socio_otras_asoc} />
+                    <label htmlFor="es_socio_otras_asoc" className="text-xs">Socio de otras asociaciones</label>
+                  </div>
+                  <label className="field"><span>¿Cuáles?</span><input name="cuales_otras_asoc" defaultValue={socioForm.cuales_otras_asoc} /></label>
+                  <div className="bg-emerald-50 p-3 rounded-lg border border-emerald-100 flex items-start gap-2">
+                    <input type="checkbox" id="recibo_anual_pagado" name="recibo_anual_pagado" defaultChecked={socioForm.recibo_anual_pagado} />
+                    <label htmlFor="recibo_anual_pagado" className="text-xs font-bold text-emerald-900">Recibo Anual Pagado</label>
+                  </div>
+                  <label className="field"><span>Fecha de pago del recibo</span><input type="date" name="fecha_pago_recibo" defaultValue={socioForm.fecha_pago_recibo} /></label>
+                  <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 flex items-start gap-2">
+                    <input type="checkbox" id="autoriza_imagenes" name="autoriza_imagenes" defaultChecked={socioForm.autoriza_imagenes} />
+                    <label htmlFor="autoriza_imagenes" className="text-[10px] text-emerald-800">
+                      <b>Autoriza publicación de imágenes:</b> El socio permite el uso de fotos en web/RRSS.
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-end pt-4 border-t">
+                <button className="btn btn-primary px-10 py-2.5" type="submit" disabled={saving}>
+                  {saving ? "Procesando..." : editingSocioId ? "Actualizar Ficha de Socio" : "Guardar Socio en Base de Datos"}
                 </button>
-              ) : null}
+              </div>
             </form>
           </section>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* MODAL DE REVISIÓN DETALLADA DE SOCIO */}
+      {/* ======================================================== */}
+      {viewingSocioDetails && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col animate-in fade-in zoom-in duration-200">
+            <header className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+              <div>
+                <h2 className="text-xl font-bold text-slate-900">Revisión de Solicitud: @{viewingSocioDetails.username}</h2>
+                <p className="text-xs text-slate-500 uppercase font-bold tracking-wider">Ficha de inscripción digitalizada</p>
+              </div>
+              <button onClick={() => setViewingSocioDetails(null)} className="text-slate-400 hover:text-slate-600 text-2xl px-2">×</button>
+            </header>
+
+            <div className="flex-1 overflow-y-auto p-6 space-y-8">
+              {/* Sección 1: Personales */}
+              <section>
+                <h3 className="text-sm font-bold text-emerald-700 mb-3 border-b border-emerald-100 pb-1">📋 1. Datos Personales</h3>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
+                  <div><p className="text-slate-500 text-[10px] uppercase font-bold">Nombre Completo</p><p className="font-medium">{viewingSocioDetails.first_name} {viewingSocioDetails.last_name}</p></div>
+                  <div><p className="text-slate-500 text-[10px] uppercase font-bold">DNI/NIF</p><p className="font-mono">{viewingSocioDetails.dni_nif}</p></div>
+                  <div><p className="text-slate-500 text-[10px] uppercase font-bold">Fecha Nacimiento</p><p>{viewingSocioDetails.fecha_nacimiento || "No indicada"}</p></div>
+                  <div className="col-span-2"><p className="text-slate-500 text-[10px] uppercase font-bold">Dirección</p><p>{viewingSocioDetails.domicilio} {viewingSocioDetails.numero_casa}, {viewingSocioDetails.piso} {viewingSocioDetails.letra}</p></div>
+                  <div><p className="text-slate-500 text-[10px] uppercase font-bold">Localidad</p><p>{viewingSocioDetails.codigo_postal} - {viewingSocioDetails.localidad}</p></div>
+                  <div><p className="text-slate-500 text-[10px] uppercase font-bold">Emails</p><p>{viewingSocioDetails.email}</p>{viewingSocioDetails.email_secundario && <p className="text-slate-400 text-xs">{viewingSocioDetails.email_secundario}</p>}</div>
+                  <div><p className="text-slate-500 text-[10px] uppercase font-bold">Teléfonos</p><p>{viewingSocioDetails.telefono}</p>{viewingSocioDetails.telefono_movil_2 && <p className="text-slate-400 text-xs">{viewingSocioDetails.telefono_movil_2}</p>}</div>
+                </div>
+              </section>
+
+              {/* Sección 2: Bancarios */}
+              <section className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                <h3 className="text-sm font-bold text-slate-700 mb-3 border-b border-slate-200 pb-1">💳 2. Datos Bancarios y Recibo Anual</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                  <div><p className="text-slate-500 text-[10px] uppercase font-bold">Titular de la Cuenta</p><p className="font-medium">{viewingSocioDetails.titular_cuenta} ({viewingSocioDetails.nif_titular})</p></div>
+                  <div><p className="text-slate-500 text-[10px] uppercase font-bold">Entidad Bancaria</p><p>{viewingSocioDetails.entidad_bancaria}</p></div>
+                  <div className="col-span-full"><p className="text-slate-500 text-[10px] uppercase font-bold">IBAN Internacional</p><p className="font-mono text-lg text-emerald-800 tracking-wider bg-white p-2 border rounded mt-1">{viewingSocioDetails.iban}</p></div>
+                  <div className="col-span-full flex gap-4 bg-white p-2 rounded border border-dashed text-center">
+                    <div className="flex-1 border-r"><p className="text-[9px] text-slate-400">Entidad</p><p className="font-mono">{viewingSocioDetails.banco_entidad}</p></div>
+                    <div className="flex-1 border-r"><p className="text-[9px] text-slate-400">Sucursal</p><p className="font-mono">{viewingSocioDetails.banco_sucursal}</p></div>
+                    <div className="flex-1 border-r"><p className="text-[9px] text-slate-400">DC</p><p className="font-mono">{viewingSocioDetails.banco_dc}</p></div>
+                    <div className="flex-2"><p className="text-[9px] text-slate-400">Nº Cuenta</p><p className="font-mono">{viewingSocioDetails.banco_cuenta}</p></div>
+                  </div>
+                </div>
+              </section>
+
+              {/* Sección 3: Familiares */}
+              <section>
+                <h3 className="text-sm font-bold text-slate-700 mb-3 border-b border-slate-200 pb-1">👥 3. Miembros Adicionales (Cuota Familiar)</h3>
+                {viewingSocioDetails.familiares?.length > 0 ? (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs text-left">
+                      <thead>
+                        <tr className="border-b text-slate-500">
+                          <th className="py-2">Nombre y Apellidos</th>
+                          <th className="py-2">DNI/NIF</th>
+                          <th className="py-2">F. Nacimiento</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {viewingSocioDetails.familiares.map((f, i) => (
+                          <tr key={i} className="border-b last:border-0 hover:bg-slate-50">
+                            <td className="py-2 font-medium">{f.nombre} {f.apellidos}</td>
+                            <td className="py-2 font-mono">{f.nif}</td>
+                            <td className="py-2">{f.fnac}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : <p className="text-xs text-slate-400 italic">No se han registrado familiares adicionales en esta solicitud.</p>}
+              </section>
+
+              {/* Sección 4: Otros */}
+              <section className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                <div>
+                  <h3 className="text-sm font-bold text-slate-700 mb-2 border-b border-slate-200 pb-1">🔍 Otras Asociaciones</h3>
+                  <p className="text-sm">{viewingSocioDetails.es_socio_otras_asoc ? `Sí: ${viewingSocioDetails.cuales_otras_asoc}` : "No pertenece a otras asociaciones."}</p>
+                </div>
+                <div className="bg-emerald-50 p-3 rounded-lg border border-emerald-100">
+                  <h3 className="text-sm font-bold text-emerald-800 mb-1">📸 Autorización de Imágenes</h3>
+                  <p className="text-xs text-emerald-700 italic">
+                    {viewingSocioDetails.autoriza_imagenes 
+                      ? "✅ El usuario AUTORIZA la publicación de imágenes de las actividades." 
+                      : "❌ El usuario NO AUTORIZA la publicación de imágenes."}
+                  </p>
+                </div>
+              </section>
+            </div>
+
+            <footer className="p-6 border-t border-slate-100 bg-slate-50 flex flex-wrap gap-3 justify-end">
+              <button className="btn btn-secondary" onClick={() => setViewingSocioDetails(null)}>Cerrar Revisión</button>
+              <button className="bg-rose-600 text-white px-6 py-2 rounded-lg font-bold hover:bg-rose-700 transition" onClick={async () => {
+                if (confirm(`¿Rechazar solicitud de @${viewingSocioDetails.username}?`)) {
+                  await request(`/admin/users/${viewingSocioDetails.id}/`, { method: "PATCH", body: JSON.stringify({ estado_socio: 'RECHAZADA' }) });
+                  await loadSocios();
+                  setViewingSocioDetails(null);
+                }
+              }} disabled={saving}>
+                Rechazar Solicitud
+              </button>
+              <button className="bg-emerald-600 text-white px-8 py-2 rounded-lg font-bold hover:bg-emerald-700 shadow-lg shadow-emerald-200 transition" onClick={async () => {
+                await request(`/admin/users/${viewingSocioDetails.id}/`, { method: "PATCH", body: JSON.stringify({ estado_socio: 'ACEPTADA' }) });
+                await loadSocios();
+                setViewingSocioDetails(null);
+                setStatus(`Socio @${viewingSocioDetails.username} aprobado correctamente.`);
+              }} disabled={saving}>
+                Aprobar y Asignar Nº Socio
+              </button>
+            </footer>
+          </div>
         </div>
       )}
     </main>
