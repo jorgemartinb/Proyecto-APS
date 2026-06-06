@@ -235,6 +235,7 @@ export default function Home() {
     recibo_anual_pagado: false,
     fecha_pago_recibo: "",
     estado_socio: "NO_SOCIO",
+    is_staff: false,
   });
 
   // Identificador de Admin basado en el backend de Django (is_staff)
@@ -615,6 +616,7 @@ export default function Home() {
       recibo_anual_pagado: false,
       fecha_pago_recibo: "",
       estado_socio: "NO_SOCIO",
+      is_staff: false,
     });
   }
 
@@ -636,6 +638,7 @@ export default function Home() {
       data.autoriza_imagenes = formData.get("autoriza_imagenes") === "on";
       data.es_socio_otras_asoc = formData.get("es_socio_otras_asoc") === "on";
       data.recibo_anual_pagado = formData.get("recibo_anual_pagado") === "on";
+      data.is_staff = formData.get("is_staff") === "on";
 
       const familiares = [];
       for (let i = 1; i <= 5; i++) {
@@ -1461,6 +1464,10 @@ export default function Home() {
                       <option value="BAJA_SOLICITADA">Baja Solicitada</option>
                     </select>
                   </label>
+                  <div className="flex items-center gap-2 pt-1 bg-rose-50 p-2 rounded border border-rose-100">
+                    <input type="checkbox" id="is_staff" name="is_staff" defaultChecked={socioForm.is_staff} className="accent-rose-600" />
+                    <label htmlFor="is_staff" className="text-[10px] font-bold text-rose-800 uppercase">Permisos de Administrador</label>
+                  </div>
                 </div>
 
                 {/* Bloque: Personales */}
