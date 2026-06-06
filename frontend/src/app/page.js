@@ -651,7 +651,14 @@ export default function Home() {
       }
       data.familiares = familiares;
 
-      const payload = { ...data };
+      // Limpiamos campos numéricos y de fecha: si vienen como "" (vacío), los mandamos como null
+      // para que Django no devuelva error de validación de formato.
+      const payload = {
+        ...data,
+        numero_socio: data.numero_socio === "" ? null : data.numero_socio,
+        fecha_pago_recibo: data.fecha_pago_recibo === "" ? null : data.fecha_pago_recibo,
+        fecha_nacimiento: data.fecha_nacimiento === "" ? null : data.fecha_nacimiento,
+      };
 
       const path = editingSocioId
         ? `/admin/users/${editingSocioId}/`
@@ -1180,10 +1187,12 @@ export default function Home() {
                 data.autoriza_imagenes = formData.get("autoriza_imagenes") === "on";
                 data.es_socio_otras_asoc = formData.get("es_socio_otras_asoc") === "on";
 
+                // Comprobamos si el usuario ya estaba en el sistema (socio, pendiente o baja solicitada)
+                const isAlreadyRegistered = auth.profile?.estado_socio !== 'NO_SOCIO' && auth.profile?.estado_socio !== 'RECHAZADA';
                 await request("/user/profile/", { method: "PUT", body: JSON.stringify(data) });
                 const session = await loadProfile(auth);
                 updateAuth(session);
-                setStatus("Ficha de socio actualizada correctamente.");
+                setStatus(isAlreadyRegistered ? "Perfil actualizado correctamente." : "Ficha de socio completada. Tu solicitud de alta ha sido enviada.");
               } catch (err) { setError(normalizeError(err)); } finally { setSaving(false); }
             }}>
               <div className="grid gap-6 lg:grid-cols-2">
@@ -1269,7 +1278,11 @@ export default function Home() {
               </div>
               <div className="flex justify-end">
                 <button className="btn btn-primary px-12 py-3 text-lg" type="submit" disabled={saving}>
-                  {saving ? "Guardando..." : "Guardar y Tramitar Alta como Socio"}
+                  {saving 
+                    ? "Guardando..." 
+                    : (auth.profile?.estado_socio !== 'NO_SOCIO' && auth.profile?.estado_socio !== 'RECHAZADA')
+                      ? "Guardar cambios del perfil" 
+                      : "Guardar y Tramitar Alta como Socio"}
                 </button>
               </div>
             </form>
