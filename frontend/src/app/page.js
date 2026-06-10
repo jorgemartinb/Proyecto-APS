@@ -248,6 +248,8 @@ export default function Home() {
   const [loadingPropuestas, setLoadingPropuestas] = useState(false);
   const [editingPropuestaId, setEditingPropuestaId] = useState(null);
   const [onlyPendingPropuestas, setOnlyPendingPropuestas] = useState(false);
+  const [propuestaSearch, setPropuestaSearch] = useState("");
+  const [onlyPresentedPropuestas, setOnlyPresentedPropuestas] = useState(false);
   const [onlyFinalizedPropuestas, setOnlyFinalizedPropuestas] = useState(false);
   const [propuestaForm, setPropuestaForm] = useState({
     titulo: "",
@@ -439,14 +441,33 @@ export default function Home() {
   }, [socioSearch, socios, onlyActiveSocios]);
 
   const filteredPropuestas = useMemo(() => {
-    if (!onlyPendingPropuestas && !onlyFinalizedPropuestas) return propuestas;
+    let result = propuestas;
 
-    return propuestas.filter((p) => {
-      if (onlyPendingPropuestas && p.estado === "PENDIENTE") return true;
-      if (onlyFinalizedPropuestas && p.estado === "FINALIZADA") return true;
-      return false;
+    // 1. Filtrar por estado si hay algún checkbox marcado
+    if (onlyPendingPropuestas || onlyPresentedPropuestas || onlyFinalizedPropuestas) {
+      result = result.filter((p) => {
+        if (onlyPendingPropuestas && p.estado === "PENDIENTE") return true;
+        if (onlyPresentedPropuestas && p.estado === "PRESENTADA") return true;
+        if (onlyFinalizedPropuestas && p.estado === "FINALIZADA") return true;
+        return false;
+      });
+    }
+
+    // 2. Filtrar por búsqueda de texto (Título o Usuario)
+    const term = propuestaSearch.trim().toLowerCase();
+    if (!term) return result;
+
+    return result.filter((p) => {
+      const text = [
+        p.titulo,
+        p.vecino_username,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return text.includes(term);
     });
-  }, [propuestas, onlyPendingPropuestas, onlyFinalizedPropuestas]);
+  }, [propuestas, onlyPendingPropuestas, onlyPresentedPropuestas, onlyFinalizedPropuestas, propuestaSearch]);
 
   const upcomingReservations = useMemo(
     () => reservations.filter((reservation) => new Date(reservation.end_time) >= new Date() && reservation.estado !== "RECHAZADA").slice(0, 6),
@@ -1459,7 +1480,16 @@ export default function Home() {
                 : "Envía tus propuestas o quejas para que la asociación las presente en el próximo pleno."}
             </p>
 
-            <div className="mb-6 flex flex-wrap gap-6 items-center">
+            <div className="mb-6 flex flex-col sm:flex-row sm:items-end gap-6">
+              <label className="field max-w-md flex-1">
+                <span>Buscar propuesta</span>
+                <input
+                  value={propuestaSearch}
+                  onChange={(event) => setPropuestaSearch(event.target.value)}
+                  placeholder={isAdmin ? "Buscar por título o usuario..." : "Buscar por título..."}
+                />
+              </label>
+              <div className="flex flex-wrap gap-6 items-center pb-2">
               <div className="flex items-center gap-2">
                 <input
                   type="checkbox"
@@ -1475,6 +1505,18 @@ export default function Home() {
               <div className="flex items-center gap-2">
                 <input
                   type="checkbox"
+                  id="filterPresentedPropuestas"
+                  className="w-4 h-4 accent-emerald-600 cursor-pointer"
+                  checked={onlyPresentedPropuestas}
+                  onChange={(e) => setOnlyPresentedPropuestas(e.target.checked)}
+                />
+                <label htmlFor="filterPresentedPropuestas" className="text-sm font-semibold text-slate-700 cursor-pointer select-none">
+                  Solo presentadas
+                </label>
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
                   id="filterFinalizedPropuestas"
                   className="w-4 h-4 accent-emerald-600 cursor-pointer"
                   checked={onlyFinalizedPropuestas}
@@ -1483,6 +1525,7 @@ export default function Home() {
                 <label htmlFor="filterFinalizedPropuestas" className="text-sm font-semibold text-slate-700 cursor-pointer select-none">
                   Solo finalizadas
                 </label>
+              </div>
               </div>
             </div>
 
