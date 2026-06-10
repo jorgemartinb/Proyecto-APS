@@ -3,9 +3,8 @@ from django.db import models
 class PropuestaPleno(models.Model):
     ESTADOS = [
         ('PENDIENTE', 'Pendiente'),
-        ('REVISION', 'En Revisión'),
+        ('RECHAZADA', 'Rechazada'),
         ('PRESENTADA', 'Presentada por Registro'),
-        ('TRAMITE', 'En Trámite'),
         ('FINALIZADA', 'Finalizada'),
     ]
     vecino = models.ForeignKey('usuarios.Usuario', on_delete=models.CASCADE, related_name='propuestas')

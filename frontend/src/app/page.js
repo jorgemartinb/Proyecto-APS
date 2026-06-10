@@ -34,6 +34,10 @@ const FIELD_LABELS = {
   telefono: "Teléfono",
   numero_socio: "Número de socio",
   estado_socio: "Estado de socio",
+  descripcion: "Descripción",
+  fecha_registro: "Fecha de Registro",
+  numero_registro: "Número de Registro",
+  respuesta_admin: "Respuesta / Comentarios",
 };
 const ERROR_TRANSLATIONS = [
   ["No active account found with the given credentials", "No existe una cuenta activa con ese usuario y contraseña."],
@@ -53,8 +57,10 @@ const ERROR_TRANSLATIONS = [
   ["NO_SOCIO", "No Socio"],
   ["PENDIENTE", "Solicitud Pendiente"],
   ["ACEPTADA", "Socio Activo"],
-  ["RECHAZADA", "Solicitud Rechazada"],
+  ["RECHAZADA", "Rechazada"],
   ["BAJA_SOLICITADA", "Baja Solicitada"],
+  ["PRESENTADA", "Presentada por Registro"],
+  ["FINALIZADA", "Finalizada"],
 ];
 
 function pad(value) {
@@ -238,6 +244,20 @@ export default function Home() {
     is_staff: false,
   });
 
+  const [propuestas, setPropuestas] = useState([]);
+  const [loadingPropuestas, setLoadingPropuestas] = useState(false);
+  const [editingPropuestaId, setEditingPropuestaId] = useState(null);
+  const [onlyPendingPropuestas, setOnlyPendingPropuestas] = useState(false);
+  const [onlyFinalizedPropuestas, setOnlyFinalizedPropuestas] = useState(false);
+  const [propuestaForm, setPropuestaForm] = useState({
+    titulo: "",
+    descripcion: "",
+    estado: "PENDIENTE",
+    fecha_registro: "",
+    numero_registro: "",
+    respuesta_admin: "",
+  });
+
   // Identificador de Admin basado en el backend de Django (is_staff)
   const isAdmin = auth?.profile?.is_staff || false;
   const currentUser = auth?.profile?.username;
@@ -329,6 +349,19 @@ export default function Home() {
     }
   }, [isAdmin, request]);
 
+  const loadPropuestas = useCallback(async () => {
+    if (!auth) return;
+    setLoadingPropuestas(true);
+    try {
+      const data = await request("/propuestas/");
+      setPropuestas(data);
+    } catch (err) {
+      setError(`No se pudieron cargar las propuestas. ${normalizeError(err)}`);
+    } finally {
+      setLoadingPropuestas(false);
+    }
+  }, [auth, request]);
+
   const loadProfile = useCallback(
     async (session) => {
       const profileResponse = await fetch(`${API_BASE}/user/profile/`, {
@@ -361,7 +394,10 @@ export default function Home() {
     if (activeTab === "admin_socios" || activeTab === "admin_reservations") {
       void loadSocios();
     }
-  }, [activeTab, loadSocios]);
+    if (activeTab === "plenos") {
+      void loadPropuestas();
+    }
+  }, [activeTab, loadSocios, loadPropuestas]);
 
   const calendarDays = useMemo(() => buildCalendarDays(viewDate), [viewDate]);
   const reservationsByDay = useMemo(() => groupByDay(reservations), [reservations]);
@@ -401,6 +437,17 @@ export default function Home() {
       return text.includes(term);
     });
   }, [socioSearch, socios, onlyActiveSocios]);
+
+  const filteredPropuestas = useMemo(() => {
+    if (!onlyPendingPropuestas && !onlyFinalizedPropuestas) return propuestas;
+
+    return propuestas.filter((p) => {
+      if (onlyPendingPropuestas && p.estado === "PENDIENTE") return true;
+      if (onlyFinalizedPropuestas && p.estado === "FINALIZADA") return true;
+      return false;
+    });
+  }, [propuestas, onlyPendingPropuestas, onlyFinalizedPropuestas]);
+
   const upcomingReservations = useMemo(
     () => reservations.filter((reservation) => new Date(reservation.end_time) >= new Date() && reservation.estado !== "RECHAZADA").slice(0, 6),
     [reservations],
@@ -717,6 +764,67 @@ export default function Home() {
     }
   }
 
+  function cancelEditingPropuesta() {
+    setEditingPropuestaId(null);
+    setPropuestaForm({
+      titulo: "",
+      descripcion: "",
+      estado: "PENDIENTE",
+      fecha_registro: "",
+      numero_registro: "",
+      respuesta_admin: "",
+    });
+  }
+
+  function startEditingPropuesta(propuesta) {
+    setEditingPropuestaId(propuesta.id);
+    setPropuestaForm({ ...propuesta });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  async function handlePropuestaSubmit(event) {
+    event.preventDefault();
+    setSaving(true);
+    setError("");
+    setStatus("");
+    try {
+      const path = editingPropuestaId ? `/propuestas/${editingPropuestaId}/` : "/propuestas/";
+
+        // Limpiamos el payload: si fecha_registro es una cadena vacía, enviamos null
+        const payload = {
+          ...propuestaForm,
+          fecha_registro: propuestaForm.fecha_registro === "" ? null : propuestaForm.fecha_registro,
+        };
+
+      await request(path, {
+        method: editingPropuestaId ? "PUT" : "POST",
+          body: JSON.stringify(payload),
+      });
+      setStatus(editingPropuestaId ? "Propuesta actualizada." : "Propuesta enviada correctamente.");
+      cancelEditingPropuesta();
+      await loadPropuestas();
+    } catch (err) {
+      setError(normalizeError(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDeletePropuesta(id) {
+    if (!window.confirm("¿Borrar esta propuesta?")) return;
+    setSaving(true);
+    try {
+      await request(`/propuestas/${id}/`, { method: "DELETE" });
+      setStatus("Propuesta eliminada.");
+      await loadPropuestas();
+      if (editingPropuestaId === id) cancelEditingPropuesta();
+    } catch (err) {
+      setError(normalizeError(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
   function startEditing(reservation) {
     setEditingId(reservation.id);
     setSelectedDate(new Date(reservation.start_time));
@@ -796,6 +904,12 @@ export default function Home() {
               >
                 👤 Mi Perfil
               </button>
+              <button
+                className={`py-3 px-1 font-semibold text-sm border-b-2 transition ${activeTab === "plenos" ? "border-emerald-600 text-emerald-700" : "border-transparent text-slate-500 hover:text-slate-800"}`}
+                onClick={() => setActiveTab("plenos")}
+              >
+                🏛️ Plenos
+              </button>
               {isAdmin && (
                 <>
               <button
@@ -803,9 +917,9 @@ export default function Home() {
                 onClick={() => setActiveTab("admin_reservations")}
               >
                 ⏳ Solicitudes Pendientes
-                {(reservations.filter((r) => r.estado === "PENDIENTE").length + socios.filter((s) => s.estado_socio === "PENDIENTE").length) > 0 && (
+                {(reservations.filter((r) => r.estado === "PENDIENTE").length + socios.filter((s) => s.estado_socio === "PENDIENTE").length + propuestas.filter(p => p.estado === "PENDIENTE").length) > 0 && (
                   <span className="ml-2 bg-amber-500 text-white text-xs px-1.5 py-0.5 rounded-full font-bold">
-                    {reservations.filter((r) => r.estado === "PENDIENTE").length + socios.filter((s) => s.estado_socio === "PENDIENTE").length}
+                    {reservations.filter((r) => r.estado === "PENDIENTE").length + socios.filter((s) => s.estado_socio === "PENDIENTE").length + propuestas.filter(p => p.estado === "PENDIENTE").length}
                   </span>
                 )}
               </button>
@@ -1290,6 +1404,120 @@ export default function Home() {
               </div>
             </form>
           </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* VISTA 4: PROPUESTAS PLENO */}
+      {/* ======================================================== */}
+      {activeTab === "plenos" && (
+        <div className="mx-auto w-full max-w-7xl px-4 py-5 sm:px-6 lg:px-8 space-y-8">
+          <section className="panel">
+            <h2 className="text-xl font-bold text-slate-950 mb-1">Propuestas para el Pleno Municipal</h2>
+            <p className="text-sm text-slate-600 mb-6">
+              {isAdmin 
+                ? "Gestión de las peticiones ciudadanas para presentar al Ayuntamiento." 
+                : "Envía tus propuestas o quejas para que la asociación las presente en el próximo pleno."}
+            </p>
+
+            <div className="mb-6 flex flex-wrap gap-6 items-center">
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="filterPendingPropuestas"
+                  className="w-4 h-4 accent-emerald-600 cursor-pointer"
+                  checked={onlyPendingPropuestas}
+                  onChange={(e) => setOnlyPendingPropuestas(e.target.checked)}
+                />
+                <label htmlFor="filterPendingPropuestas" className="text-sm font-semibold text-slate-700 cursor-pointer select-none">
+                  Solo pendientes
+                </label>
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="filterFinalizedPropuestas"
+                  className="w-4 h-4 accent-emerald-600 cursor-pointer"
+                  checked={onlyFinalizedPropuestas}
+                  onChange={(e) => setOnlyFinalizedPropuestas(e.target.checked)}
+                />
+                <label htmlFor="filterFinalizedPropuestas" className="text-sm font-semibold text-slate-700 cursor-pointer select-none">
+                  Solo finalizadas
+                </label>
+              </div>
+            </div>
+
+            <div className="grid gap-6 lg:grid-cols-[1fr_400px]">
+              <div className="space-y-4">
+                <h3 className="font-bold text-slate-800">
+                  {isAdmin ? "Todas las propuestas" : "Mis propuestas"}
+                </h3>
+                {loadingPropuestas ? <p className="empty">Cargando propuestas...</p> : null}
+                {!loadingPropuestas && filteredPropuestas.length === 0 ? <p className="empty">No hay propuestas que coincidan con los filtros.</p> : null}
+                {filteredPropuestas.map((p) => (
+                  <div key={p.id} className="bg-white border rounded-xl p-4 shadow-sm hover:border-emerald-200 transition">
+                    <div className="flex justify-between items-start mb-2">
+                      <span className={`text-[10px] px-2 py-0.5 rounded font-bold uppercase ${
+                        p.estado === 'FINALIZADA' ? 'bg-emerald-100 text-emerald-800' :
+                        p.estado === 'PRESENTADA' ? 'bg-blue-100 text-blue-800' :
+                        p.estado === 'RECHAZADA' ? 'bg-rose-100 text-rose-800' :
+                        p.estado === 'PENDIENTE' ? 'bg-amber-100 text-amber-800' :
+                        'bg-slate-100 text-slate-700'
+                      }`}>
+                        {translateText(p.estado)}
+                      </span>
+                      <span className="text-[10px] text-slate-400 font-medium">{new Date(p.fecha_creacion).toLocaleDateString()}</span>
+                    </div>
+                    <h4 className="font-bold text-slate-900 mb-1">{p.titulo}</h4>
+                    <p className="text-sm text-slate-600 line-clamp-2 mb-3">{p.descripcion}</p>
+                    {isAdmin && <p className="text-[10px] text-slate-500 mb-3">Vecino: <span className="font-bold">@{p.vecino_username}</span></p>}
+                    {(p.numero_registro || p.respuesta_admin) && (
+                      <div className="bg-slate-50 p-2 rounded text-xs border border-dashed mb-3">
+                        {p.numero_registro && <p><b>Registro:</b> {p.numero_registro} ({p.fecha_registro})</p>}
+                        {p.respuesta_admin && <p className="mt-1"><b>Respuesta:</b> {p.respuesta_admin}</p>}
+                      </div>
+                    )}
+                    <div className="flex gap-2">
+                      <button className="icon-action" onClick={() => startEditingPropuesta(p)}>{isAdmin ? "Gestionar" : "Ver / Editar"}</button>
+                      <button className="icon-action danger" onClick={() => handleDeletePropuesta(p.id)}>Borrar</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="space-y-4">
+                <div className="panel bg-emerald-50/50 border-emerald-100 sticky top-5">
+                  <h3 className="font-bold text-slate-800 mb-4">{editingPropuestaId ? (isAdmin ? "Gestionar Propuesta" : "Editar Propuesta") : "Nueva Propuesta"}</h3>
+                  <form className="flex flex-col gap-3" onSubmit={handlePropuestaSubmit}>
+                    <label className="field"><span>Título corto</span><input required value={propuestaForm.titulo} onChange={e => setPropuestaForm({...propuestaForm, titulo: e.target.value})} placeholder="Ej: Arreglo de baches" disabled={saving} /></label>
+                    <label className="field"><span>Descripción</span><textarea required rows="4" className="w-full p-2 border rounded text-sm" value={propuestaForm.descripcion} onChange={e => setPropuestaForm({...propuestaForm, descripcion: e.target.value})} placeholder="Detalla aquí tu petición..." disabled={saving} /></label>
+                    {isAdmin && editingPropuestaId && (
+                      <div className="mt-4 pt-4 border-t border-emerald-200 space-y-3">
+                        <h4 className="text-xs font-bold text-emerald-800 uppercase">Gestión Administrativa</h4>
+                        <label className="field"><span>Estado</span>
+                          <select className="w-full p-2 border rounded text-sm bg-white" value={propuestaForm.estado} onChange={e => setPropuestaForm({...propuestaForm, estado: e.target.value})}>
+                            <option value="PENDIENTE">Pendiente</option>
+                            <option value="RECHAZADA">Rechazada</option>
+                            <option value="PRESENTADA">Presentada por Registro</option>
+                            <option value="FINALIZADA">Respondida / Finalizada</option>
+                          </select>
+                        </label>
+                        <div className="grid grid-cols-2 gap-2">
+                          <label className="field"><span>Nº Registro</span><input value={propuestaForm.numero_registro || ""} onChange={e => setPropuestaForm({...propuestaForm, numero_registro: e.target.value})} /></label>
+                          <label className="field"><span>Fecha Registro</span><input type="date" value={propuestaForm.fecha_registro || ""} onChange={e => setPropuestaForm({...propuestaForm, fecha_registro: e.target.value})} /></label>
+                        </div>
+                        <label className="field"><span>Respuesta Ayuntamiento</span><textarea rows="3" className="w-full p-2 border rounded text-sm" value={propuestaForm.respuesta_admin || ""} onChange={e => setPropuestaForm({...propuestaForm, respuesta_admin: e.target.value})} placeholder="Resumen de la respuesta..." /></label>
+                      </div>
+                    )}
+                    <div className="flex gap-2 pt-2">
+                      <button className="btn btn-primary flex-1" type="submit" disabled={saving}>{saving ? "Guardando..." : "Guardar Propuesta"}</button>
+                      {editingPropuestaId && <button className="btn btn-secondary" type="button" onClick={cancelEditingPropuesta}>Cancelar</button>}
+                    </div>
+                  </form>
+                </div>
+              </div>
+            </div>
+          </section>
         </div>
       )}
 
