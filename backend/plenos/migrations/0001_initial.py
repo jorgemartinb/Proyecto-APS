@@ -20,7 +20,7 @@ class Migration(migrations.Migration):
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
                 ('titulo', models.CharField(max_length=200)),
                 ('descripcion', models.TextField()),
-                ('estado', models.CharField(choices=[('PENDIENTE', 'Pendiente'), ('REVISION', 'En Revisión'), ('PRESENTADA', 'Presentada por Registro'), ('TRAMITE', 'En Trámite'), ('FINALIZADA', 'Finalizada')], default='PENDIENTE', max_length=20)),
+                ('estado', models.CharField(choices=[('PENDIENTE', 'Pendiente'), ('RECHAZADA', 'Rechazada'), ('PRESENTADA', 'Presentada por Registro'), ('FINALIZADA', 'Finalizada')], default='PENDIENTE', max_length=20)),
                 ('fecha_creacion', models.DateTimeField(auto_now_add=True)),
                 ('fecha_registro', models.DateField(blank=True, null=True)),
                 ('numero_registro', models.CharField(blank=True, max_length=100, null=True)),

@@ -908,7 +908,7 @@ export default function Home() {
                 className={`py-3 px-1 font-semibold text-sm border-b-2 transition ${activeTab === "plenos" ? "border-emerald-600 text-emerald-700" : "border-transparent text-slate-500 hover:text-slate-800"}`}
                 onClick={() => setActiveTab("plenos")}
               >
-                🏛️ Plenos
+                🏛️ Pleno
               </button>
               {isAdmin && (
                 <>
@@ -1236,6 +1236,45 @@ export default function Home() {
                         }
                       }} disabled={saving}>
                         Rechazar
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+
+          <section className="panel">
+            <h2 className="text-xl font-bold text-slate-950 mb-2">Propuestas de Pleno Pendientes</h2>
+            <p className="text-sm text-slate-600 mb-6">Peticiones ciudadanas que esperan ser revisadas o registradas.</p>
+            
+            {propuestas.filter((p) => p.estado === "PENDIENTE").length === 0 ? (
+              <p className="text-center py-8 text-slate-500 font-medium bg-slate-50 border border-dashed rounded-lg">
+                🎉 No hay propuestas de pleno pendientes.
+              </p>
+            ) : (
+              <div className="flex flex-col gap-4">
+                {propuestas.filter((p) => p.estado === "PENDIENTE").map((p) => (
+                  <div key={p.id} className="bg-white border border-emerald-200 rounded-xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm hover:border-emerald-300 transition">
+                    <div>
+                      <span className="bg-amber-100 text-amber-800 text-xs px-2 py-0.5 rounded font-semibold uppercase tracking-wide">Propuesta Pendiente</span>
+                      <h3 className="font-bold text-slate-900 text-lg mt-1">{p.titulo}</h3>
+                      <p className="text-sm text-slate-600">Enviada por: <span className="font-semibold text-slate-800">@{p.vecino_username}</span></p>
+                      <p className="text-sm text-slate-500 mt-2 italic line-clamp-1">"{p.descripcion}"</p>
+                    </div>
+                    <div className="flex flex-wrap sm:flex-col gap-2 shrink-0">
+                      <button className="bg-slate-100 text-slate-700 border border-slate-200 px-4 py-2 rounded-lg font-semibold text-sm hover:bg-slate-200 transition" 
+                        onClick={() => {
+                          setActiveTab("plenos");
+                          startEditingPropuesta(p);
+                        }}>
+                        Gestionar en Plenos
+                      </button>
+                      <button className="bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold text-sm hover:bg-emerald-700 shadow-sm transition" onClick={async () => {
+                        await request(`/propuestas/${p.id}/`, { method: "PATCH", body: JSON.stringify({ estado: 'PRESENTADA' }) });
+                        await loadPropuestas();
+                      }} disabled={saving}>
+                        Marcar como Presentada
                       </button>
                     </div>
                   </div>
