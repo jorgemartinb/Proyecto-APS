@@ -436,13 +436,16 @@ export default function Home() {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       void loadSocios();
     }
+    if (activeTab === "admin_reservations" && isAdmin) {
+      void loadBiblioteca();
+    }
     if (activeTab === "plenos") {
       void loadPropuestas();
     }
     if (activeTab === "biblioteca") {
       void loadBiblioteca();
     }
-  }, [activeTab, loadSocios, loadPropuestas, loadBiblioteca]);
+  }, [activeTab, isAdmin, loadSocios, loadPropuestas, loadBiblioteca]);
 
   const calendarDays = useMemo(() => buildCalendarDays(viewDate), [viewDate]);
   const reservationsByDay = useMemo(() => groupByDay(reservations), [reservations]);
@@ -1017,6 +1020,23 @@ export default function Home() {
     }
   }
 
+  async function handleDeleteLibro(libro) {
+    if (!window.confirm(`¿Eliminar "${libro.titulo}" del catalogo?`)) return;
+    setSaving(true);
+    setError("");
+    setStatus("");
+    try {
+      await request(`/libros/${libro.id}/`, { method: "DELETE" });
+      await loadBiblioteca();
+      if (editingLibroId === libro.id) resetLibroForm();
+      setStatus("Libro eliminado del catalogo.");
+    } catch (err) {
+      setError(normalizeError(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
   function startEditing(reservation) {
     setEditingId(reservation.id);
     setSelectedDate(new Date(reservation.start_time));
@@ -1118,9 +1138,9 @@ export default function Home() {
                 onClick={() => setActiveTab("admin_reservations")}
               >
                 ⏳ Solicitudes Pendientes
-                {(reservations.filter((r) => r.estado === "PENDIENTE").length + socios.filter((s) => s.estado_socio === "PENDIENTE").length + propuestas.filter(p => p.estado === "PENDIENTE").length) > 0 && (
+                {(reservations.filter((r) => r.estado === "PENDIENTE").length + socios.filter((s) => s.estado_socio === "PENDIENTE").length + propuestas.filter(p => p.estado === "PENDIENTE").length + prestamosPendientesAdmin.length) > 0 && (
                   <span className="ml-2 bg-amber-500 text-white text-xs px-1.5 py-0.5 rounded-full font-bold">
-                    {reservations.filter((r) => r.estado === "PENDIENTE").length + socios.filter((s) => s.estado_socio === "PENDIENTE").length + propuestas.filter(p => p.estado === "PENDIENTE").length}
+                    {reservations.filter((r) => r.estado === "PENDIENTE").length + socios.filter((s) => s.estado_socio === "PENDIENTE").length + propuestas.filter(p => p.estado === "PENDIENTE").length + prestamosPendientesAdmin.length}
                   </span>
                 )}
               </button>
@@ -1392,6 +1412,44 @@ export default function Home() {
                         Aceptar Reserva
                       </button>
                       <button className="bg-rose-50 text-rose-700 border border-rose-200 px-4 py-2 rounded-lg font-semibold text-sm hover:bg-rose-100 transition" onClick={() => handleUpdateStatus(r.id, "RECHAZADA")} disabled={saving}>
+                        Rechazar
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+
+          <section className="panel">
+            <h2 className="text-xl font-bold text-slate-950 mb-2">Solicitudes de Prestamo de Libros</h2>
+            <p className="text-sm text-slate-600 mb-6">Libros solicitados por socios que esperan aprobacion administrativa.</p>
+
+            {prestamosPendientesAdmin.length === 0 ? (
+              <p className="text-center py-8 text-slate-500 font-medium bg-slate-50 border border-dashed rounded-lg">
+                No hay solicitudes de libros pendientes.
+              </p>
+            ) : (
+              <div className="flex flex-col gap-4">
+                {prestamosPendientesAdmin.map((prestamo) => (
+                  <div key={prestamo.id} className="bg-white border border-amber-200 rounded-xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm hover:border-amber-300 transition">
+                    <div>
+                      <span className="bg-amber-100 text-amber-800 text-xs px-2 py-0.5 rounded font-semibold uppercase tracking-wide">Libro pendiente</span>
+                      <h3 className="font-bold text-slate-900 text-lg mt-1">{prestamo.libro_titulo}</h3>
+                      <p className="text-sm text-slate-600">Solicitado por: <span className="font-semibold text-slate-800">@{prestamo.usuario_username}</span></p>
+                      <p className="text-sm text-slate-500 mt-2">{prestamo.libro_autor || "Autoria no indicada"}</p>
+                    </div>
+                    <div className="flex flex-wrap sm:flex-col gap-2 shrink-0">
+                      <button className="bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold text-sm hover:bg-emerald-700 shadow-sm transition" onClick={() => handlePrestamoLibroAction(prestamo, "aprobar")} disabled={saving}>
+                        Aprobar prestamo
+                      </button>
+                      <button className="bg-blue-50 text-blue-700 border border-blue-200 px-4 py-2 rounded-lg font-semibold text-sm hover:bg-blue-100 transition" onClick={() => handlePrestamoLibroAction(prestamo, "prestar")} disabled={saving}>
+                        Marcar entregado
+                      </button>
+                      <button className="bg-rose-50 text-rose-700 border border-rose-200 px-4 py-2 rounded-lg font-semibold text-sm hover:bg-rose-100 transition" onClick={() => {
+                        const motivo = window.prompt("Motivo de rechazo (opcional)") || "";
+                        handlePrestamoLibroAction(prestamo, "rechazar", { motivo_rechazo: motivo });
+                      }} disabled={saving}>
                         Rechazar
                       </button>
                     </div>
@@ -1833,7 +1891,12 @@ export default function Home() {
                         <button className="btn btn-primary" type="button" onClick={() => handleSolicitarLibro(libro)} disabled={!puedeSolicitar || saving}>
                           Solicitar prestamo
                         </button>
-                        {isAdmin ? <button className="btn btn-secondary" type="button" onClick={() => startEditingLibro(libro)}>Editar</button> : null}
+                        {isAdmin ? (
+                          <>
+                            <button className="btn btn-secondary" type="button" onClick={() => startEditingLibro(libro)}>Editar</button>
+                            <button className="icon-action danger" type="button" onClick={() => handleDeleteLibro(libro)} disabled={saving}>Eliminar</button>
+                          </>
+                        ) : null}
                       </div>
                     </div>
                     {!auth ? <p className="mt-3 text-xs font-semibold text-slate-500">Inicia sesion para solicitar prestamos.</p> : null}
