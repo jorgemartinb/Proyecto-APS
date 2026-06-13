@@ -1129,7 +1129,7 @@ export default function Home() {
                 className={`py-3 px-1 font-semibold text-sm border-b-2 transition ${activeTab === "biblioteca" ? "border-emerald-600 text-emerald-700" : "border-transparent text-slate-500 hover:text-slate-800"}`}
                 onClick={() => setActiveTab("biblioteca")}
               >
-                Biblioteca
+                📚 Biblioteca
               </button>
               {isAdmin && (
                 <>
