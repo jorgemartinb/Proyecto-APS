@@ -516,7 +516,7 @@ export default function Home() {
   }, [propuestas, onlyPendingPropuestas, onlyPresentedPropuestas, onlyFinalizedPropuestas, propuestaSearch]);
 
   const filteredLibros = useMemo(() => {
-    let result = libros;
+    let result = libros.filter((libro) => libro.activo);
     if (libroDisponibilidad) {
       result = result.filter((libro) => libro.disponibilidad === libroDisponibilidad);
     }
