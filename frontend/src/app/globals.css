@@ -28,7 +28,9 @@ body {
 }
 
 button,
-input {
+input,
+select,
+textarea {
   font: inherit;
 }
 
@@ -37,7 +39,9 @@ button {
 }
 
 button:disabled,
-input:disabled {
+input:disabled,
+select:disabled,
+textarea:disabled {
   cursor: not-allowed;
   opacity: 0.58;
 }
@@ -263,7 +267,9 @@ input:disabled {
   font-weight: 800;
 }
 
-.field input {
+.field input,
+.field select,
+.field textarea {
   min-height: 42px;
   width: 100%;
   border: 1px solid #cbd5d1;
@@ -274,7 +280,9 @@ input:disabled {
   outline: none;
 }
 
-.field input:focus {
+.field input:focus,
+.field select:focus,
+.field textarea:focus {
   border-color: #0f766e;
   box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.15);
 }
@@ -482,6 +490,29 @@ input:disabled {
 
   .more-pill {
     display: none;
+  }
+}
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+
+  .loan-sheet,
+  .loan-sheet * {
+    visibility: visible;
+  }
+
+  .loan-sheet {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    max-width: none;
+    box-shadow: none;
+  }
+
+  .print\:hidden {
+    display: none !important;
   }
 }
 

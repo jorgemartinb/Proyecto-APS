@@ -23,6 +23,7 @@ urlpatterns = [
     path('api/', include('reservas.urls')),
     path('api/', include('usuarios.urls')),
     path('api/propuestas/', include('plenos.urls')),
+    path('api/', include('biblioteca.urls')),
 
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
     path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),

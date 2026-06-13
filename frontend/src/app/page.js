@@ -131,6 +131,7 @@ function translateText(value) {
 }
 
 function normalizeError(error) {
+  if (error instanceof Error && error.message) return translateText(error.message);
   if (!error || typeof error !== "object") return "No se pudo completar la accion.";
   if (error.detail) return translateText(error.detail);
   if (error.non_field_errors) {
@@ -138,7 +139,10 @@ function normalizeError(error) {
     return translateText(value);
   }
 
-  return Object.entries(error)
+  const entries = Object.entries(error);
+  if (entries.length === 0) return "No se recibio detalle del error.";
+
+  return entries
     .map(([field, value]) => `${FIELD_LABELS[field] || field}: ${translateText(Array.isArray(value) ? value.join(" ") : value)}`)
     .join(" ");
 }
@@ -259,6 +263,23 @@ export default function Home() {
     numero_registro: "",
     respuesta_admin: "",
   });
+  const [libros, setLibros] = useState([]);
+  const [prestamosLibros, setPrestamosLibros] = useState([]);
+  const [loadingBiblioteca, setLoadingBiblioteca] = useState(false);
+  const [libroSearch, setLibroSearch] = useState("");
+  const [libroDisponibilidad, setLibroDisponibilidad] = useState("");
+  const [editingLibroId, setEditingLibroId] = useState(null);
+  const [selectedPrestamoFicha, setSelectedPrestamoFicha] = useState(null);
+  const [libroForm, setLibroForm] = useState({
+    titulo: "",
+    autor: "",
+    editorial: "",
+    categoria: "",
+    isbn: "",
+    etiqueta: "",
+    disponibilidad: "DISPONIBLE",
+    activo: true,
+  });
 
   // Identificador de Admin basado en el backend de Django (is_staff)
   const isAdmin = auth?.profile?.is_staff || false;
@@ -364,6 +385,24 @@ export default function Home() {
     }
   }, [auth, request]);
 
+  const loadBiblioteca = useCallback(async () => {
+    setLoadingBiblioteca(true);
+    try {
+      const data = await request("/libros/");
+      setLibros(data);
+      if (auth) {
+        const prestamos = await request(isAdmin ? "/admin/prestamos/libros/" : "/prestamos/libros/mios/");
+        setPrestamosLibros(prestamos);
+      } else {
+        setPrestamosLibros([]);
+      }
+    } catch (err) {
+      setError(`No se pudo cargar la biblioteca. ${normalizeError(err)}`);
+    } finally {
+      setLoadingBiblioteca(false);
+    }
+  }, [auth, isAdmin, request]);
+
   const loadProfile = useCallback(
     async (session) => {
       const profileResponse = await fetch(`${API_BASE}/user/profile/`, {
@@ -394,12 +433,16 @@ export default function Home() {
   // Disparador para refrescar socios al entrar a su pestaña
   useEffect(() => {
     if (activeTab === "admin_socios" || activeTab === "admin_reservations") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       void loadSocios();
     }
     if (activeTab === "plenos") {
       void loadPropuestas();
     }
-  }, [activeTab, loadSocios, loadPropuestas]);
+    if (activeTab === "biblioteca") {
+      void loadBiblioteca();
+    }
+  }, [activeTab, loadSocios, loadPropuestas, loadBiblioteca]);
 
   const calendarDays = useMemo(() => buildCalendarDays(viewDate), [viewDate]);
   const reservationsByDay = useMemo(() => groupByDay(reservations), [reservations]);
@@ -468,6 +511,35 @@ export default function Home() {
       return text.includes(term);
     });
   }, [propuestas, onlyPendingPropuestas, onlyPresentedPropuestas, onlyFinalizedPropuestas, propuestaSearch]);
+
+  const filteredLibros = useMemo(() => {
+    let result = libros;
+    if (libroDisponibilidad) {
+      result = result.filter((libro) => libro.disponibilidad === libroDisponibilidad);
+    }
+    const term = libroSearch.trim().toLowerCase();
+    if (!term) return result;
+    return result.filter((libro) => [libro.titulo, libro.autor, libro.categoria, libro.isbn]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase()
+      .includes(term));
+  }, [libroDisponibilidad, libroSearch, libros]);
+
+  const misPrestamosLibros = useMemo(
+    () => prestamosLibros.filter((prestamo) => !isAdmin || prestamo.usuario_username === currentUser),
+    [currentUser, isAdmin, prestamosLibros],
+  );
+
+  const prestamosPendientesAdmin = useMemo(
+    () => prestamosLibros.filter((prestamo) => prestamo.estado === "PENDIENTE"),
+    [prestamosLibros],
+  );
+
+  const prestamosActivosAdmin = useMemo(
+    () => prestamosLibros.filter((prestamo) => ["APROBADA", "PRESTADA", "VENCIDA"].includes(prestamo.estado)),
+    [prestamosLibros],
+  );
 
   const upcomingReservations = useMemo(
     () => reservations.filter((reservation) => new Date(reservation.end_time) >= new Date() && reservation.estado !== "RECHAZADA").slice(0, 6),
@@ -846,6 +918,105 @@ export default function Home() {
     }
   }
 
+  function resetLibroForm() {
+    setEditingLibroId(null);
+    setLibroForm({
+      titulo: "",
+      autor: "",
+      editorial: "",
+      categoria: "",
+      isbn: "",
+      etiqueta: "",
+      disponibilidad: "DISPONIBLE",
+      activo: true,
+    });
+  }
+
+  function startEditingLibro(libro) {
+    setEditingLibroId(libro.id);
+    setLibroForm({
+      titulo: libro.titulo || "",
+      autor: libro.autor || "",
+      editorial: libro.editorial || "",
+      categoria: libro.categoria || "",
+      isbn: libro.isbn || "",
+      etiqueta: libro.etiqueta || "",
+      disponibilidad: libro.disponibilidad || "DISPONIBLE",
+      activo: Boolean(libro.activo),
+    });
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  async function handleLibroSubmit(event) {
+    event.preventDefault();
+    if (!isAdmin) return;
+    setSaving(true);
+    setError("");
+    setStatus("");
+    try {
+      const payload = {
+        ...libroForm,
+        titulo: libroForm.titulo.trim(),
+        autor: libroForm.autor.trim(),
+        editorial: libroForm.editorial.trim(),
+        categoria: libroForm.categoria.trim(),
+        isbn: libroForm.isbn.trim() || null,
+        etiqueta: libroForm.etiqueta.trim() || null,
+      };
+      await request(editingLibroId ? `/libros/${editingLibroId}/` : "/libros/", {
+        method: editingLibroId ? "PATCH" : "POST",
+        body: JSON.stringify(payload),
+      });
+      resetLibroForm();
+      await loadBiblioteca();
+      setStatus(editingLibroId ? "Libro actualizado." : "Libro creado.");
+    } catch (err) {
+      setError(normalizeError(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleSolicitarLibro(libro) {
+    if (!auth) {
+      setError("Inicia sesion para solicitar prestamos.");
+      return;
+    }
+    setSaving(true);
+    setError("");
+    setStatus("");
+    try {
+      await request("/prestamos/libros/solicitar/", {
+        method: "POST",
+        body: JSON.stringify({ libro: libro.id }),
+      });
+      await loadBiblioteca();
+      setStatus("Solicitud enviada. Queda pendiente de aprobacion administrativa.");
+    } catch (err) {
+      setError(normalizeError(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handlePrestamoLibroAction(prestamo, action, payload = {}) {
+    setSaving(true);
+    setError("");
+    setStatus("");
+    try {
+      await request(`/admin/prestamos/libros/${prestamo.id}/${action}/`, {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      await loadBiblioteca();
+      setStatus("Prestamo actualizado.");
+    } catch (err) {
+      setError(normalizeError(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
   function startEditing(reservation) {
     setEditingId(reservation.id);
     setSelectedDate(new Date(reservation.start_time));
@@ -889,6 +1060,9 @@ export default function Home() {
               </h1>
             </div>
             <div className="flex flex-wrap items-center gap-2">
+              <button className="btn btn-secondary" type="button" onClick={() => setActiveTab(activeTab === "biblioteca" ? "calendar" : "biblioteca")}>
+                {activeTab === "biblioteca" ? "Calendario" : "Biblioteca"}
+              </button>
               <button className="btn btn-secondary" type="button" onClick={selectToday}>
                 Hoy
               </button>
@@ -930,6 +1104,12 @@ export default function Home() {
                 onClick={() => setActiveTab("plenos")}
               >
                 🏛️ Pleno
+              </button>
+              <button
+                className={`py-3 px-1 font-semibold text-sm border-b-2 transition ${activeTab === "biblioteca" ? "border-emerald-600 text-emerald-700" : "border-transparent text-slate-500 hover:text-slate-800"}`}
+                onClick={() => setActiveTab("biblioteca")}
+              >
+                Biblioteca
               </button>
               {isAdmin && (
                 <>
@@ -1281,7 +1461,7 @@ export default function Home() {
                       <span className="bg-amber-100 text-amber-800 text-xs px-2 py-0.5 rounded font-semibold uppercase tracking-wide">Propuesta Pendiente</span>
                       <h3 className="font-bold text-slate-900 text-lg mt-1">{p.titulo}</h3>
                       <p className="text-sm text-slate-600">Enviada por: <span className="font-semibold text-slate-800">@{p.vecino_username}</span></p>
-                      <p className="text-sm text-slate-500 mt-2 italic line-clamp-1">"{p.descripcion}"</p>
+                      <p className="text-sm text-slate-500 mt-2 italic line-clamp-1">&quot;{p.descripcion}&quot;</p>
                     </div>
                     <div className="flex flex-wrap sm:flex-col gap-2 shrink-0">
                       <button className="bg-slate-100 text-slate-700 border border-slate-200 px-4 py-2 rounded-lg font-semibold text-sm hover:bg-slate-200 transition" 
@@ -1600,6 +1780,136 @@ export default function Home() {
               </div>
             </div>
           </section>
+        </div>
+      )}
+
+      {activeTab === "biblioteca" && (
+        <div className="mx-auto grid w-full max-w-7xl gap-5 px-4 py-5 sm:px-6 lg:grid-cols-[minmax(0,1fr)_390px] lg:px-8">
+          <section className="panel">
+            <div className="section-title">
+              <div>
+                <h2 className="text-xl font-semibold text-slate-950">Biblioteca feminista</h2>
+                <p className="mt-1 text-sm text-slate-600">Catalogo de libros y solicitudes de prestamo.</p>
+              </div>
+              <span className="text-sm font-bold text-emerald-700">{libros.filter((libro) => libro.activo).length} activos</span>
+            </div>
+
+            <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_220px]">
+              <label className="field">
+                <span>Buscar</span>
+                <input value={libroSearch} onChange={(event) => setLibroSearch(event.target.value)} placeholder="Titulo, autora, categoria o ISBN" />
+              </label>
+              <label className="field">
+                <span>Disponibilidad</span>
+                <select className="w-full rounded border border-slate-300 bg-white p-2 text-sm" value={libroDisponibilidad} onChange={(event) => setLibroDisponibilidad(event.target.value)}>
+                  <option value="">Todas</option>
+                  <option value="DISPONIBLE">Disponibles</option>
+                  <option value="NO_DISPONIBLE">No disponibles</option>
+                </select>
+              </label>
+            </div>
+
+            <div className="mt-5 grid gap-3">
+              {loadingBiblioteca ? <p className="empty">Cargando biblioteca...</p> : null}
+              {!loadingBiblioteca && filteredLibros.length === 0 ? <p className="empty">No hay libros que coincidan con los filtros.</p> : null}
+              {filteredLibros.map((libro) => {
+                const socioActivo = auth?.profile?.es_socio && auth?.profile?.estado_socio === "ACEPTADA";
+                const puedeSolicitar = socioActivo && libro.activo && libro.disponibilidad === "DISPONIBLE";
+                return (
+                  <article key={libro.id} className="rounded-lg border border-slate-200 bg-white p-4">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap gap-2">
+                          <span className={`rounded px-2 py-0.5 text-xs font-bold ${libro.activo && libro.disponibilidad === "DISPONIBLE" ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-700"}`}>
+                            {!libro.activo ? "Inactivo" : libro.disponibilidad === "DISPONIBLE" ? "Disponible" : "No disponible"}
+                          </span>
+                          {libro.categoria ? <span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600">{libro.categoria}</span> : null}
+                        </div>
+                        <h3 className="mt-2 text-lg font-bold text-slate-950">{libro.titulo}</h3>
+                        <p className="text-sm text-slate-600">{libro.autor || "Autoria no indicada"}</p>
+                        <p className="mt-1 text-xs text-slate-500">{[libro.editorial, libro.isbn ? `ISBN: ${libro.isbn}` : "ISBN no disponible", libro.etiqueta].filter(Boolean).join(" · ")}</p>
+                      </div>
+                      <div className="flex shrink-0 flex-wrap gap-2">
+                        <button className="btn btn-primary" type="button" onClick={() => handleSolicitarLibro(libro)} disabled={!puedeSolicitar || saving}>
+                          Solicitar prestamo
+                        </button>
+                        {isAdmin ? <button className="btn btn-secondary" type="button" onClick={() => startEditingLibro(libro)}>Editar</button> : null}
+                      </div>
+                    </div>
+                    {!auth ? <p className="mt-3 text-xs font-semibold text-slate-500">Inicia sesion para solicitar prestamos.</p> : null}
+                    {auth && !socioActivo ? <p className="mt-3 text-xs font-semibold text-amber-700">Solo los socios activos pueden solicitar prestamos.</p> : null}
+                  </article>
+                );
+              })}
+            </div>
+          </section>
+
+          <aside className="flex flex-col gap-5">
+            <section className="panel">
+              <h2 className="text-lg font-semibold text-slate-950">Mis prestamos</h2>
+              <div className="mt-4 flex flex-col gap-3">
+                {!auth ? <p className="empty">Inicia sesion para ver tus solicitudes.</p> : null}
+                {auth && misPrestamosLibros.length === 0 ? <p className="empty">No tienes solicitudes ni prestamos.</p> : null}
+                {misPrestamosLibros.slice(0, 8).map((prestamo) => (
+                  <BookLoanItem key={prestamo.id} prestamo={prestamo} onFicha={setSelectedPrestamoFicha} />
+                ))}
+              </div>
+            </section>
+
+            {isAdmin ? (
+              <>
+                <section className="panel">
+                  <h2 className="text-lg font-semibold text-slate-950">{editingLibroId ? "Editar libro" : "Alta de libro"}</h2>
+                  <form className="mt-4 flex flex-col gap-3" onSubmit={handleLibroSubmit}>
+                    <label className="field"><span>Titulo</span><input required value={libroForm.titulo} onChange={(e) => setLibroForm({ ...libroForm, titulo: e.target.value })} /></label>
+                    <label className="field"><span>Autor/a</span><input value={libroForm.autor} onChange={(e) => setLibroForm({ ...libroForm, autor: e.target.value })} /></label>
+                    <label className="field"><span>Editorial</span><input value={libroForm.editorial} onChange={(e) => setLibroForm({ ...libroForm, editorial: e.target.value })} /></label>
+                    <label className="field"><span>Categoria</span><input value={libroForm.categoria} onChange={(e) => setLibroForm({ ...libroForm, categoria: e.target.value })} /></label>
+                    <label className="field"><span>ISBN</span><input value={libroForm.isbn} onChange={(e) => setLibroForm({ ...libroForm, isbn: e.target.value })} /></label>
+                    <label className="field"><span>Etiqueta</span><input value={libroForm.etiqueta} onChange={(e) => setLibroForm({ ...libroForm, etiqueta: e.target.value })} /></label>
+                    <label className="field">
+                      <span>Disponibilidad</span>
+                      <select className="w-full rounded border border-slate-300 bg-white p-2 text-sm" value={libroForm.disponibilidad} onChange={(e) => setLibroForm({ ...libroForm, disponibilidad: e.target.value })}>
+                        <option value="DISPONIBLE">Disponible</option>
+                        <option value="NO_DISPONIBLE">No disponible</option>
+                      </select>
+                    </label>
+                    <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                      <input type="checkbox" checked={libroForm.activo} onChange={(e) => setLibroForm({ ...libroForm, activo: e.target.checked })} />
+                      Activo en catalogo
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                      <button className="btn btn-primary" type="submit" disabled={saving}>{editingLibroId ? "Actualizar" : "Crear libro"}</button>
+                      {editingLibroId ? <button className="btn btn-secondary" type="button" onClick={resetLibroForm}>Cancelar</button> : null}
+                    </div>
+                  </form>
+                </section>
+
+                <section className="panel">
+                  <h2 className="text-lg font-semibold text-slate-950">Control de prestamos</h2>
+                  <div className="mt-4 flex flex-col gap-3">
+                    {prestamosPendientesAdmin.length === 0 && prestamosActivosAdmin.length === 0 ? <p className="empty">No hay solicitudes pendientes ni prestamos activos.</p> : null}
+                    {[...prestamosPendientesAdmin, ...prestamosActivosAdmin].map((prestamo) => (
+                      <BookLoanItem
+                        key={prestamo.id}
+                        admin
+                        prestamo={prestamo}
+                        saving={saving}
+                        onFicha={setSelectedPrestamoFicha}
+                        onAprobar={() => handlePrestamoLibroAction(prestamo, "aprobar")}
+                        onPrestar={() => handlePrestamoLibroAction(prestamo, "prestar")}
+                        onRechazar={() => {
+                          const motivo = window.prompt("Motivo de rechazo (opcional)") || "";
+                          handlePrestamoLibroAction(prestamo, "rechazar", { motivo_rechazo: motivo });
+                        }}
+                        onDevolver={() => handlePrestamoLibroAction(prestamo, "devolver")}
+                      />
+                    ))}
+                  </div>
+                </section>
+              </>
+            ) : null}
+          </aside>
         </div>
       )}
 
@@ -1989,7 +2299,85 @@ export default function Home() {
           </div>
         </div>
       )}
+
+      {selectedPrestamoFicha && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4">
+          <div className="loan-sheet max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-lg bg-white p-6 shadow-2xl">
+            <div className="mb-5 flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wider text-emerald-700">Asociacion Vecinal 3C</p>
+                <h2 className="text-2xl font-bold text-slate-950">Ficha de prestamo de libro</h2>
+              </div>
+              <div className="flex gap-2 print:hidden">
+                <button className="btn btn-secondary" type="button" onClick={() => window.print()}>Imprimir</button>
+                <button className="btn btn-secondary" type="button" onClick={() => setSelectedPrestamoFicha(null)}>Cerrar</button>
+              </div>
+            </div>
+            <div className="grid gap-3 text-sm sm:grid-cols-2">
+              <FichaField label="Lector" value={selectedPrestamoFicha.usuario_nombre} />
+              <FichaField label="Numero de socio" value={selectedPrestamoFicha.usuario_numero_socio || "No disponible"} />
+              <FichaField label="Telefono" value={selectedPrestamoFicha.usuario_telefono || "No disponible"} />
+              <FichaField label="Correo electronico" value={selectedPrestamoFicha.usuario_email || "No disponible"} />
+              <FichaField label="Fecha" value={formatDateOnly(selectedPrestamoFicha.fecha_aprobacion || selectedPrestamoFicha.fecha_solicitud)} />
+              <FichaField label="Fecha prevista de devolucion" value={selectedPrestamoFicha.fecha_prevista_devolucion || "Pendiente"} />
+              <FichaField label="Titulo" value={selectedPrestamoFicha.libro_titulo} wide />
+              <FichaField label="Estado" value={selectedPrestamoFicha.estado} />
+            </div>
+            <div className="mt-6 rounded-lg border border-slate-200 bg-slate-50 p-4">
+              <h3 className="font-bold text-slate-900">Condiciones</h3>
+              <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-slate-700">
+                <li>El prestamo de libros es de un plazo de 15 dias.</li>
+                <li>Los libros deben devolverse a la Asociacion Vecinal 3C.</li>
+                <li>El prestamo de libros esta reservado a socios de la Asociacion Vecinal 3C.</li>
+                <li>Esta ficha sirve para llevar control de los libros prestados.</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
+  );
+}
+
+function formatDateOnly(value) {
+  if (!value) return "Pendiente";
+  return new Intl.DateTimeFormat("es-ES", { day: "2-digit", month: "2-digit", year: "numeric" }).format(new Date(value));
+}
+
+function FichaField({ label, value, wide }) {
+  return (
+    <div className={`rounded border border-slate-200 p-3 ${wide ? "sm:col-span-2" : ""}`}>
+      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{label}</p>
+      <p className="mt-1 font-semibold text-slate-900">{value || "No disponible"}</p>
+    </div>
+  );
+}
+
+function BookLoanItem({ prestamo, admin, saving, onAprobar, onPrestar, onRechazar, onDevolver, onFicha }) {
+  const puedeFicha = ["APROBADA", "PRESTADA", "VENCIDA", "DEVUELTA"].includes(prestamo.estado);
+  const badgeClass = {
+    PENDIENTE: "bg-amber-100 text-amber-800",
+    APROBADA: "bg-blue-100 text-blue-800",
+    PRESTADA: "bg-emerald-100 text-emerald-800",
+    DEVUELTA: "bg-slate-100 text-slate-700",
+    RECHAZADA: "bg-rose-100 text-rose-800",
+    VENCIDA: "bg-red-100 text-red-800",
+  }[prestamo.estado] || "bg-slate-100 text-slate-700";
+
+  return (
+    <article className="rounded-lg border border-slate-200 bg-white p-3">
+      <span className={`rounded px-2 py-0.5 text-xs font-bold ${badgeClass}`}>{prestamo.estado}</span>
+      <h3 className="mt-2 font-bold text-slate-950">{prestamo.libro_titulo}</h3>
+      <p className="text-xs text-slate-600">{admin ? `Solicitado por @${prestamo.usuario_username}` : prestamo.libro_autor}</p>
+      <p className="mt-1 text-xs text-slate-500">Devolucion prevista: {prestamo.fecha_prevista_devolucion || "pendiente"}</p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {puedeFicha ? <button className="icon-action" type="button" onClick={() => onFicha(prestamo)}>Ficha</button> : null}
+        {admin && prestamo.estado === "PENDIENTE" ? <button className="icon-action" type="button" onClick={onAprobar} disabled={saving}>Aprobar</button> : null}
+        {admin && ["PENDIENTE", "APROBADA"].includes(prestamo.estado) ? <button className="icon-action" type="button" onClick={onPrestar} disabled={saving}>Entregado</button> : null}
+        {admin && ["PENDIENTE", "APROBADA"].includes(prestamo.estado) ? <button className="icon-action danger" type="button" onClick={onRechazar} disabled={saving}>Rechazar</button> : null}
+        {admin && ["APROBADA", "PRESTADA", "VENCIDA"].includes(prestamo.estado) ? <button className="icon-action" type="button" onClick={onDevolver} disabled={saving}>Devuelto</button> : null}
+      </div>
+    </article>
   );
 }
 
