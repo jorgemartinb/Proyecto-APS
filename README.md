@@ -18,3 +18,6 @@ python manage.py importar_libros "/ruta/INVENTARIO DE LIBROS - BIBILOTECA FEMINI
 ```
 
 El importador lee la hoja `Hoja 1`, espera 44 libros, no usa la hoja `PRESTAMOS`, conserva el ISBN como texto y es idempotente.
+
+## Enlace web
+https://proyecto-aps-ten.vercel.app/
