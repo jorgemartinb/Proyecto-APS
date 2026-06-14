@@ -1,15 +1,9 @@
 /** @type {import('next').NextConfig} */
-const backendApiUrl = process.env.BACKEND_API_URL || "http://localhost:8000";
-
 const nextConfig = {
   reactCompiler: true,
-  async rewrites() {
-    return [
-      {
-        source: "/api/:path*",
-        destination: `${backendApiUrl}/api/:path*`,
-      },
-    ];
+  output: 'export', // <--- Esto obliga a Next a generar HTML/JS puro que Vercel entiende a la primera
+  images: {
+    unoptimized: true, // <--- Obligatorio si usas 'output: export' y tienes componentes <Image> de Next
   },
 };
 
