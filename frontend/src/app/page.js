@@ -309,7 +309,7 @@ export default function Home() {
   const updateAuth = useCallback((nextAuth) => {
     setAuth(nextAuth);
     saveStoredAuth(nextAuth);
-    // Si cerramos sesión, devolvemos al usuario al calendario normal
+    // Si cerramos sesión, devolvemos al usuario a la portada pública.
     if (!nextAuth) setActiveTab("calendar");
   }, []);
 
@@ -1302,7 +1302,9 @@ export default function Home() {
               Centro de reservas {isAdmin && "• Panel de Control"}
             </p>
             <p className="mt-2 text-sm text-slate-600">
-              Las pestañas de arriba son la navegación principal. Cada sección muestra sus propios controles dentro.
+              {auth
+                ? "Las pestañas de arriba son la navegación principal. Cada sección muestra sus propios controles dentro."
+                : "Inicia sesion o crea tu cuenta para acceder al calendario y al resto de secciones del centro."}
             </p>
           </div>
         </div>
@@ -1328,10 +1330,61 @@ export default function Home() {
         </section>
       )}
 
+      {!auth && (
+        <section className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+          <div className="grid gap-5 lg:grid-cols-[minmax(0,1.1fr)_420px]">
+            <section className="panel flex flex-col justify-between gap-6">
+              <div>
+                <p className="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-700">
+                  Bienvenido
+                </p>
+                <h1 className="mt-3 text-3xl font-semibold tracking-normal text-slate-950 sm:text-4xl">
+                  Gestiona reservas, compras y vida del centro desde un solo sitio.
+                </h1>
+                <p className="mt-4 max-w-2xl text-base text-slate-600">
+                  Al iniciar sesion veras tus pestañas disponibles segun tu rol: calendario, perfil, biblioteca, plenos y las herramientas de administracion si te corresponden.
+                </p>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-sm font-semibold text-slate-900">Reservas</p>
+                  <p className="mt-2 text-sm text-slate-600">Consulta agenda, solicita espacios y revisa tus reservas.</p>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-sm font-semibold text-slate-900">Socios</p>
+                  <p className="mt-2 text-sm text-slate-600">Accede a tu perfil, solicitudes y secciones internas del centro.</p>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-sm font-semibold text-slate-900">Administracion</p>
+                  <p className="mt-2 text-sm text-slate-600">Gestion centralizada para aprobaciones, compras y registro de socios.</p>
+                </div>
+              </div>
+            </section>
+
+            <section className="panel">
+              <h2 className="text-2xl font-semibold text-slate-950">Acceso</h2>
+              <p className="mt-2 text-sm text-slate-600">
+                Entra con tu cuenta o registrate para solicitar el alta y empezar a usar la plataforma.
+              </p>
+              <div className="mt-5">
+                <AuthForm
+                  authForm={authForm}
+                  authMode={authMode}
+                  saving={saving}
+                  setAuthForm={setAuthForm}
+                  setAuthMode={setAuthMode}
+                  onSubmit={handleAuthSubmit}
+                />
+              </div>
+            </section>
+          </div>
+        </section>
+      )}
+
       {/* ======================================================== */}
       {/* VISTA 1: CALENDARIO TRADICIONAL (Para todos los usuarios) */}
       {/* ======================================================== */}
-      {activeTab === "calendar" && (
+      {auth && activeTab === "calendar" && (
         <div className="mx-auto w-full max-w-7xl space-y-5 px-4 py-5 sm:px-6 lg:px-8">
           <section className="panel">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
@@ -1433,30 +1486,6 @@ export default function Home() {
             </section>
 
             <aside className="flex flex-col gap-5">
-              <section className="panel">
-                {auth ? (
-                  <div className="account">
-                    <div>
-                      <p className="text-sm text-slate-600">Sesion activa {isAdmin && "👑"}</p>
-                      <h2 className="text-lg font-semibold text-slate-950">{auth.profile?.first_name || auth.profile?.username}</h2>
-                      <p className="text-sm text-slate-500">{auth.profile?.email || "Sin email registrado"}</p>
-                    </div>
-                    <button className="btn btn-secondary" type="button" onClick={handleLogout} disabled={saving}>
-                      Salir
-                    </button>
-                  </div>
-                ) : (
-                  <AuthForm
-                    authForm={authForm}
-                    authMode={authMode}
-                    saving={saving}
-                    setAuthForm={setAuthForm}
-                    setAuthMode={setAuthMode}
-                    onSubmit={handleAuthSubmit}
-                  />
-                )}
-              </section>
-
               <section className="panel">
                 <div className="section-title">
                   <h2 className="text-lg font-semibold text-slate-950">Agenda del dia</h2>
@@ -1792,6 +1821,10 @@ export default function Home() {
                     Solicitar Baja del Centro
                   </button>
                 )}
+
+                <button className="btn btn-secondary" type="button" onClick={handleLogout} disabled={saving}>
+                  Salir
+                </button>
               </div>
             </section>
 
