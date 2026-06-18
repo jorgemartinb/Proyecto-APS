@@ -134,6 +134,18 @@ export default function BibliotecaPage() {
     }
   }
 
+  if (!auth) {
+    return (
+      <main className="min-h-screen flex items-center justify-center px-4">
+        <div className="panel text-center max-w-sm w-full py-12">
+          <p className="text-2xl mb-2">📚</p>
+          <h1 className="text-lg font-bold text-slate-900">Biblioteca feminista</h1>
+          <p className="mt-2 text-sm text-slate-500">Inicia sesión para acceder al catálogo y solicitar préstamos.</p>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main className="min-h-screen text-slate-950">
       <Alert status={status} error={error} onClose={() => { setError(""); setStatus(""); }} />

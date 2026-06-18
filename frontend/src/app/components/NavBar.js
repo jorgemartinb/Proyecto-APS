@@ -28,7 +28,7 @@ export default function NavBar() {
 
   const desktopLinks = [
     { href: "/", label: "📅 Calendario", always: true },
-    { href: "/biblioteca", label: "📚 Biblioteca", always: true },
+    { href: "/biblioteca", label: "📚 Biblioteca", auth: true },
     { href: "/perfil", label: "👤 Mi Perfil", auth: true },
     { href: "/plenos", label: "🏛️ Pleno", auth: true },
     { href: "/compras", label: "🛒 Compras", auth: true },
@@ -38,8 +38,7 @@ export default function NavBar() {
 
   const mobileLinks = [
     { href: "/", icon: "📅", label: "Inicio", always: true },
-    { href: "/biblioteca", icon: "📚", label: "Biblioteca", always: true },
-    { href: "/login", icon: "🔑", label: "Acceder", noAuth: true },
+    { href: "/biblioteca", icon: "📚", label: "Biblioteca", auth: true },
     { href: "/plenos", icon: "🏛️", label: "Pleno", auth: true },
     { href: "/compras", icon: "🛒", label: "Compras", auth: true, hide: isAdmin },
     { href: "/perfil", icon: "👤", label: "Perfil", auth: true, hide: isAdmin },
@@ -64,7 +63,7 @@ export default function NavBar() {
               const active = l.href === "/" ? pathname === "/" : pathname.startsWith(l.href);
               return (
                 <Link
-                  key={l.href}
+                  key={l.label}
                   href={l.href}
                   className={`whitespace-nowrap py-4 px-3 text-sm font-semibold border-b-2 transition ${
                     active
@@ -92,11 +91,7 @@ export default function NavBar() {
                   Salir
                 </button>
               </>
-            ) : (
-              <Link href="/login" className="btn btn-primary text-xs">
-                Iniciar sesión
-              </Link>
-            )}
+            ) : null}
           </div>
         </div>
       </header>
@@ -107,7 +102,7 @@ export default function NavBar() {
           const active = l.href === "/" ? pathname === "/" : pathname.startsWith(l.href);
           return (
             <Link
-              key={l.href}
+              key={l.label}
               href={l.href}
               className={`flex flex-1 flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-semibold transition ${
                 active ? "text-emerald-700" : "text-slate-400"
