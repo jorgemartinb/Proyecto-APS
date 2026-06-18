@@ -1,210 +1,25 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "/api";
-const STORAGE_KEY = "aps_reservas_auth";
-const DAY_FORMAT = new Intl.DateTimeFormat("es-ES", {
-  weekday: "long",
-  day: "numeric",
-  month: "long",
-});
-const MONTH_FORMAT = new Intl.DateTimeFormat("es-ES", {
-  month: "long",
-  year: "numeric",
-});
-const TIME_FORMAT = new Intl.DateTimeFormat("es-ES", {
-  hour: "2-digit",
-  minute: "2-digit",
-});
-const CURRENCY_FORMAT = new Intl.NumberFormat("es-ES", {
-  style: "currency",
-  currency: "EUR",
-});
-const WEEKDAYS = ["Lun", "Mar", "Mie", "Jue", "Vie", "Sab", "Dom"];
-const FIELD_LABELS = {
-  nombre: "Nombre",
-  username: "Usuario",
-  email: "Email",
-  password: "Contraseña",
-  password_two: "Repetir contraseña",
-  first_name: "Nombre",
-  last_name: "Apellidos",
-  start_time: "Inicio",
-  end_time: "Fin",
-  title: "Título",
-  non_field_errors: "Error",
-  detail: "Error",
-  dni_nif: "DNI/NIF",
-  telefono: "Teléfono",
-  numero_socio: "Número de socio",
-  estado_socio: "Estado de socio",
-  precio_aproximado: "Precio aproximado",
-  descripcion: "Descripción",
-  fecha_registro: "Fecha de Registro",
-  numero_registro: "Número de Registro",
-  respuesta_admin: "Respuesta / Comentarios",
-};
-const ERROR_TRANSLATIONS = [
-  ["No active account found with the given credentials", "No existe una cuenta activa con ese usuario y contraseña."],
-  ["Given token not valid for any token type", "La sesión no es válida. Vuelve a iniciar sesión."],
-  ["Token is invalid or expired", "La sesión ha caducado. Vuelve a iniciar sesión."],
-  ["This field is required.", "Este campo es obligatorio."],
-  ["This field may not be blank.", "Este campo no puede estar vacío."],
-  ["Enter a valid email address.", "Introduce un email válido."],
-  ["A user with that username already exists.", "Ya existe un usuario con ese nombre."],
-  ["No refresh token provided.", "No se recibió el token de sesión."],
-  ["Logout successful", "Sesión cerrada correctamente."],
-  ["Invalid password", "Contraseña incorrecta."],
-  ["Unauthorized", "No tienes autorización."],
-  ["Forbidden", "No tienes permiso para hacer esta acción."],
-  ["Not found.", "No se encontró el recurso."],
-  ["Bad Request", "Solicitud incorrecta."],
-  ["NO_SOCIO", "No Socio"],
-  ["PENDIENTE", "Solicitud Pendiente"],
-  ["ACEPTADA", "Socio Activo"],
-  ["RECHAZADA", "Rechazada"],
-  ["BAJA_SOLICITADA", "Baja Solicitada"],
-  ["SOLICITADO", "Solicitado"],
-  ["APROBADO", "Aprobado"],
-  ["COMPRADO", "Comprado"],
-  ["PRESENTADA", "Presentada por Registro"],
-  ["FINALIZADA", "Finalizada"],
-];
-
-function pad(value) {
-  return String(value).padStart(2, "0");
-}
-
-function dateKey(date) {
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
-}
-
-function monthKey(date) {
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}`;
-}
-
-function toDateTimeLocal(value) {
-  const date = value ? new Date(value) : new Date();
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
-
-function addMinutes(localValue, minutes) {
-  const date = new Date(localValue);
-  date.setMinutes(date.getMinutes() + minutes);
-  return toDateTimeLocal(date);
-}
-
-function createDefaultForm(selectedDate) {
-  const start = new Date(selectedDate);
-  start.setHours(9, 0, 0, 0);
-  const end = new Date(start);
-  end.setHours(10, 0, 0, 0);
-
-  return {
-    title: "",
-    start_time: toDateTimeLocal(start),
-    end_time: toDateTimeLocal(end),
-  };
-}
-
-function getStoredAuth() {
-  if (typeof window === "undefined") return null;
-
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
-}
-
-function saveStoredAuth(auth) {
-  if (typeof window === "undefined") return;
-
-  if (auth) {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(auth));
-  } else {
-    window.localStorage.removeItem(STORAGE_KEY);
-  }
-}
-
-function translateText(value) {
-  if (value === null || value === undefined) return "";
-
-  let text = String(value);
-  for (const [source, target] of ERROR_TRANSLATIONS) {
-    text = text.replaceAll(source, target);
-  }
-  return text;
-}
-
-function normalizeError(error) {
-  if (error instanceof Error && error.message) return translateText(error.message);
-  if (!error || typeof error !== "object") return "No se pudo completar la accion.";
-  if (error.detail) return translateText(error.detail);
-  if (error.non_field_errors) {
-    const value = Array.isArray(error.non_field_errors) ? error.non_field_errors.join(" ") : error.non_field_errors;
-    return translateText(value);
-  }
-
-  const entries = Object.entries(error);
-  if (entries.length === 0) return "No se recibio detalle del error.";
-
-  return entries
-    .map(([field, value]) => `${FIELD_LABELS[field] || field}: ${translateText(Array.isArray(value) ? value.join(" ") : value)}`)
-    .join(" ");
-}
-
-function buildCalendarDays(viewDate) {
-  const first = new Date(viewDate.getFullYear(), viewDate.getMonth(), 1);
-  const start = new Date(first);
-  const day = (first.getDay() + 6) % 7;
-  start.setDate(first.getDate() - day);
-
-  return Array.from({ length: 42 }, (_, index) => {
-    const date = new Date(start);
-    date.setDate(start.getDate() + index);
-    return date;
-  });
-}
-
-function groupByDay(reservations) {
-  return reservations.reduce((days, reservation) => {
-    const key = dateKey(new Date(reservation.start_time));
-    days[key] = days[key] || [];
-    days[key].push(reservation);
-    return days;
-  }, {});
-}
-
-function sortReservations(reservations) {
-  return [...reservations].sort((a, b) => new Date(a.start_time) - new Date(b.start_time));
-}
-
-function overlapsReservation(reservation, start, end, editingId) {
-  if (editingId && reservation.id === editingId) return false;
-  // Si la reserva ya fue rechazada por administración, no bloquea el calendario
-  if (reservation.estado === "RECHAZADA") return false;
-
-  const reservationStart = new Date(reservation.start_time);
-  const reservationEnd = new Date(reservation.end_time);
-  return reservationStart < end && reservationEnd > start;
-}
+import { useAuth } from "./context/AuthContext";
+import Alert from "./components/Alert";
+import AuthForm from "./components/AuthForm";
+import ReservationItem from "./components/ReservationItem";
+import Metric from "./components/Metric";
+import {
+  DAY_FORMAT, MONTH_FORMAT, TIME_FORMAT, WEEKDAYS,
+  dateKey, monthKey, toDateTimeLocal, addMinutes,
+  createDefaultForm, buildCalendarDays, groupByDay,
+  sortReservations, overlapsReservation, normalizeError,
+} from "./lib/utils";
 
 export default function Home() {
+  const { auth, updateAuth, request, loadProfile, isAdmin, currentUser } = useAuth();
   const today = useMemo(() => new Date(), []);
   const reservationFormRef = useRef(null);
-  const [auth, setAuth] = useState(null);
+
   const [authMode, setAuthMode] = useState("login");
-  const [authForm, setAuthForm] = useState({
-    username: "",
-    email: "",
-    password: "",
-    password_two: "",
-    first_name: "",
-    last_name: "",
-  });
+  const [authForm, setAuthForm] = useState({ username: "", email: "", password: "", password_two: "", first_name: "", last_name: "" });
   const [reservations, setReservations] = useState([]);
   const [selectedDate, setSelectedDate] = useState(today);
   const [viewDate, setViewDate] = useState(today);
@@ -215,160 +30,9 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  // 🔑 NUEVOS ESTADOS PARA GESTIÓN DE ROLES Y SOCIOS (Vistas de tu compañero)
-  const [activeTab, setActiveTab] = useState("calendar"); // Opciones: "calendar", "admin_reservations", "admin_socios", "profile"
-  const [socios, setSocios] = useState([]);
-  const [loadingSocios, setLoadingSocios] = useState(false);
-  const [socioSearch, setSocioSearch] = useState("");
-  const [onlyActiveSocios, setOnlyActiveSocios] = useState(false);
-  const [viewingSocioDetails, setViewingSocioDetails] = useState(null);
-  const [editingSocioId, setEditingSocioId] = useState(null);
-  const [socioForm, setSocioForm] = useState({
-    username: "",
-    email: "",
-    first_name: "",
-    last_name: "",
-    dni_nif: "",
-    telefono: "",
-    numero_socio: "",
-    fecha_nacimiento: "",
-    domicilio: "",
-    numero_casa: "",
-    piso: "",
-    letra: "",
-    localidad: "Tres Cantos",
-    codigo_postal: "28760",
-    email_secundario: "",
-    telefono_movil_2: "",
-    titular_cuenta: "",
-    nif_titular: "",
-    iban: "",
-    entidad_bancaria: "",
-    banco_entidad: "",
-    banco_sucursal: "",
-    banco_dc: "",
-    banco_cuenta: "",
-    familiares: [],
-    es_socio_otras_asoc: false,
-    cuales_otras_asoc: "",
-    autoriza_imagenes: false,
-    recibo_anual_pagado: false,
-    fecha_pago_recibo: "",
-    estado_socio: "NO_SOCIO",
-    is_staff: false,
-  });
-
-  const [propuestas, setPropuestas] = useState([]);
-  const [loadingPropuestas, setLoadingPropuestas] = useState(false);
-  const [editingPropuestaId, setEditingPropuestaId] = useState(null);
-  const [onlyPendingPropuestas, setOnlyPendingPropuestas] = useState(false);
-  const [propuestaSearch, setPropuestaSearch] = useState("");
-  const [onlyPresentedPropuestas, setOnlyPresentedPropuestas] = useState(false);
-  const [onlyFinalizedPropuestas, setOnlyFinalizedPropuestas] = useState(false);
-  const [propuestaForm, setPropuestaForm] = useState({
-    titulo: "",
-    descripcion: "",
-    estado: "PENDIENTE",
-    fecha_registro: "",
-    numero_registro: "",
-    respuesta_admin: "",
-  });
-  const [libros, setLibros] = useState([]);
-  const [prestamosLibros, setPrestamosLibros] = useState([]);
-  const [loadingBiblioteca, setLoadingBiblioteca] = useState(false);
-  const [libroSearch, setLibroSearch] = useState("");
-  const [libroDisponibilidad, setLibroDisponibilidad] = useState("");
-  const [editingLibroId, setEditingLibroId] = useState(null);
-  const [selectedPrestamoFicha, setSelectedPrestamoFicha] = useState(null);
-  const [libroForm, setLibroForm] = useState({
-    titulo: "",
-    autor: "",
-    editorial: "",
-    categoria: "",
-    isbn: "",
-    etiqueta: "",
-    disponibilidad: "DISPONIBLE",
-    activo: true,
-  });
-  const [compras, setCompras] = useState([]);
-  const [loadingCompras, setLoadingCompras] = useState(false);
-  const [compraSearch, setCompraSearch] = useState("");
-  const [compraForm, setCompraForm] = useState({
-    nombre: "",
-    precio_aproximado: "",
-    descripcion: "",
-    estado: "APROBADO",
-  });
-
-  // Identificador de Admin basado en el backend de Django (is_staff)
-  const isAdmin = auth?.profile?.is_staff || false;
-  const currentUser = auth?.profile?.username;
-  const socioActivo = auth?.profile?.es_socio && auth?.profile?.estado_socio === "ACEPTADA";
-  const canRequestCompras = Boolean(auth && (isAdmin || socioActivo));
-
-  const updateAuth = useCallback((nextAuth) => {
-    setAuth(nextAuth);
-    saveStoredAuth(nextAuth);
-    // Si cerramos sesión, devolvemos al usuario al calendario normal
-    if (!nextAuth) setActiveTab("calendar");
-  }, []);
-
-  const request = useCallback(
-    async (path, options = {}, retry = true) => {
-      const send = (accessToken) => {
-        const headers = new Headers(options.headers || {});
-        if (!(options.body instanceof FormData)) {
-          headers.set("Content-Type", "application/json");
-        }
-        if (accessToken) {
-          headers.set("Authorization", `Bearer ${accessToken}`);
-        }
-
-        return fetch(`${API_BASE}${path}`, {
-          ...options,
-          headers,
-        });
-      };
-
-      let response = await send(auth?.access);
-
-      if (response.status === 401 && retry && auth?.refresh) {
-        const refreshResponse = await fetch(`${API_BASE}/auth/token/refresh/`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ refresh: auth.refresh }),
-        });
-
-        if (refreshResponse.ok) {
-          const tokenData = await refreshResponse.json();
-          const refreshedAuth = { ...auth, access: tokenData.access };
-          updateAuth(refreshedAuth);
-          response = await send(tokenData.access);
-        } else {
-          updateAuth(null);
-        }
-      }
-
-      if (!response.ok) {
-        let payload = null;
-        try {
-          payload = await response.json();
-        } catch {
-          payload = { detail: response.statusText };
-        }
-        throw payload;
-      }
-
-      if (response.status === 204 || response.status === 205) return null;
-      return response.json();
-    },
-    [auth, updateAuth],
-  );
-
   const loadReservations = useCallback(async () => {
     setLoading(true);
     setError("");
-
     try {
       const data = await request("/reservations/");
       setReservations(sortReservations(data));
@@ -379,261 +43,26 @@ export default function Home() {
     }
   }, [request]);
 
-  // 👥 CARGAR SOCIOS DESDE EL ENDPOINT DE TU COMPAÑERO (IsAdminUser)
-  const loadSocios = useCallback(async () => {
-    if (!isAdmin) return;
-    setLoadingSocios(true);
-    try {
-      const data = await request("/admin/users/");
-      setSocios(data);
-    } catch (err) {
-      setError(`No se pudieron cargar los socios. ${normalizeError(err)}`);
-    } finally {
-      setLoadingSocios(false);
-    }
-  }, [isAdmin, request]);
-
-  const loadPropuestas = useCallback(async () => {
-    if (!auth) return;
-    setLoadingPropuestas(true);
-    try {
-      const data = await request("/propuestas/");
-      setPropuestas(data);
-    } catch (err) {
-      setError(`No se pudieron cargar las propuestas. ${normalizeError(err)}`);
-    } finally {
-      setLoadingPropuestas(false);
-    }
-  }, [auth, request]);
-
-  const loadBiblioteca = useCallback(async () => {
-    setLoadingBiblioteca(true);
-    try {
-      const data = await request("/libros/");
-      setLibros(data);
-      if (auth) {
-        const prestamos = await request(isAdmin ? "/admin/prestamos/libros/" : "/prestamos/libros/mios/");
-        setPrestamosLibros(prestamos);
-      } else {
-        setPrestamosLibros([]);
-      }
-    } catch (err) {
-      setError(`No se pudo cargar la biblioteca. ${normalizeError(err)}`);
-    } finally {
-      setLoadingBiblioteca(false);
-    }
-  }, [auth, isAdmin, request]);
-
-  const loadCompras = useCallback(async () => {
-    if (!auth) {
-      setCompras([]);
-      return;
-    }
-    setLoadingCompras(true);
-    try {
-      const data = await request("/compras/");
-      setCompras(data);
-    } catch (err) {
-      setError(`No se pudo cargar la lista de la compra. ${normalizeError(err)}`);
-    } finally {
-      setLoadingCompras(false);
-    }
-  }, [auth, request]);
-
-  const loadProfile = useCallback(
-    async (session) => {
-      const profileResponse = await fetch(`${API_BASE}/user/profile/`, {
-        headers: { Authorization: `Bearer ${session.access}` },
-      });
-
-      if (!profileResponse.ok) throw new Error("No se pudo cargar el perfil");
-      const profile = await profileResponse.json();
-      return { ...session, profile };
-    },
-    [],
-  );
-
-  useEffect(() => {
-    const stored = getStoredAuth();
-    if (!stored?.access) return;
-
-    loadProfile(stored)
-      .then(updateAuth)
-      .catch(() => updateAuth(null));
-  }, [loadProfile, updateAuth]);
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void loadReservations();
-  }, [loadReservations]);
-
-  // Disparador para refrescar socios al entrar a su pestaña
-  useEffect(() => {
-    if (activeTab === "admin_socios" || activeTab === "admin_reservations") {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      void loadSocios();
-    }
-    if (activeTab === "admin_reservations" && isAdmin) {
-      void loadBiblioteca();
-      void loadCompras();
-    }
-    if (activeTab === "plenos") {
-      void loadPropuestas();
-    }
-    if (activeTab === "biblioteca") {
-      void loadBiblioteca();
-    }
-    if (activeTab === "compras") {
-      void loadCompras();
-    }
-  }, [activeTab, isAdmin, loadSocios, loadPropuestas, loadBiblioteca, loadCompras]);
+  useEffect(() => { void loadReservations(); }, [loadReservations]);
 
   const calendarDays = useMemo(() => buildCalendarDays(viewDate), [viewDate]);
   const reservationsByDay = useMemo(() => groupByDay(reservations), [reservations]);
   const selectedKey = dateKey(selectedDate);
   const todaysReservations = reservationsByDay[selectedKey] || [];
   const myReservations = useMemo(
-    () => reservations.filter((reservation) => reservation.user_username === currentUser),
+    () => reservations.filter((r) => r.user_username === currentUser),
     [currentUser, reservations],
   );
-
-  const filteredSocios = useMemo(() => {
-    let result = socios;
-
-    // 1. Filtrar por socios activos si el checkbox está marcado
-    if (onlyActiveSocios) {
-      result = result.filter((s) => s.estado_socio === "ACEPTADA");
-    }
-
-    const term = socioSearch.trim().toLowerCase();
-    if (!term) return result;
-
-    // 2. Filtrar sobre el resultado previo usando el término de búsqueda
-    return result.filter((socio) => {
-      const text = [
-        socio.username,
-        socio.email,
-        socio.first_name,
-        socio.last_name,
-        socio.dni_nif,
-        socio.telefono,
-        socio.numero_socio,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-
-      return text.includes(term);
-    });
-  }, [socioSearch, socios, onlyActiveSocios]);
-
-  const filteredPropuestas = useMemo(() => {
-    let result = propuestas;
-
-    // 1. Filtrar por estado si hay algún checkbox marcado
-    if (onlyPendingPropuestas || onlyPresentedPropuestas || onlyFinalizedPropuestas) {
-      result = result.filter((p) => {
-        if (onlyPendingPropuestas && p.estado === "PENDIENTE") return true;
-        if (onlyPresentedPropuestas && p.estado === "PRESENTADA") return true;
-        if (onlyFinalizedPropuestas && p.estado === "FINALIZADA") return true;
-        return false;
-      });
-    }
-
-    // 2. Filtrar por búsqueda de texto (Título o Usuario)
-    const term = propuestaSearch.trim().toLowerCase();
-    if (!term) return result;
-
-    return result.filter((p) => {
-      const text = [
-        p.titulo,
-        p.vecino_username,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-      return text.includes(term);
-    });
-  }, [propuestas, onlyPendingPropuestas, onlyPresentedPropuestas, onlyFinalizedPropuestas, propuestaSearch]);
-
-  const filteredLibros = useMemo(() => {
-    let result = libros.filter((libro) => libro.activo);
-    if (libroDisponibilidad) {
-      result = result.filter((libro) => libro.disponibilidad === libroDisponibilidad);
-    }
-    const term = libroSearch.trim().toLowerCase();
-    if (!term) return result;
-    return result.filter((libro) => [libro.titulo, libro.autor, libro.categoria, libro.isbn]
-      .filter(Boolean)
-      .join(" ")
-      .toLowerCase()
-      .includes(term));
-  }, [libroDisponibilidad, libroSearch, libros]);
-
-  const misPrestamosLibros = useMemo(
-    () => prestamosLibros.filter((prestamo) => !isAdmin || prestamo.usuario_username === currentUser),
-    [currentUser, isAdmin, prestamosLibros],
-  );
-
-  const prestamosPendientesAdmin = useMemo(
-    () => prestamosLibros.filter((prestamo) => prestamo.estado === "PENDIENTE"),
-    [prestamosLibros],
-  );
-
-  const prestamosActivosAdmin = useMemo(
-    () => prestamosLibros.filter((prestamo) => ["APROBADA", "PRESTADA", "VENCIDA"].includes(prestamo.estado)),
-    [prestamosLibros],
-  );
-
-  const filteredCompras = useMemo(() => {
-    const term = compraSearch.trim().toLowerCase();
-    if (!term) return compras;
-
-    return compras.filter((compra) => [compra.nombre, compra.descripcion, compra.solicitante_username, compra.solicitante_nombre]
-      .filter(Boolean)
-      .join(" ")
-      .toLowerCase()
-      .includes(term));
-  }, [compraSearch, compras]);
-
-  const comprasPendientesAdmin = useMemo(
-    () => compras.filter((compra) => compra.estado === "SOLICITADO"),
-    [compras],
-  );
-
-  const totalComprasPendientes = useMemo(
-    () => compras
-      .filter((compra) => ["SOLICITADO", "APROBADO"].includes(compra.estado))
-      .reduce((sum, compra) => sum + Number(compra.precio_aproximado || 0), 0),
-    [compras],
-  );
-
-  const comprasCompradas = useMemo(
-    () => compras.filter((compra) => compra.estado === "COMPRADO"),
-    [compras],
-  );
-
-  const pendingAdminTotal = useMemo(
-    () => reservations.filter((r) => r.estado === "PENDIENTE").length
-      + socios.filter((s) => s.estado_socio === "PENDIENTE").length
-      + propuestas.filter((p) => p.estado === "PENDIENTE").length
-      + prestamosPendientesAdmin.length
-      + comprasPendientesAdmin.length,
-    [comprasPendientesAdmin, prestamosPendientesAdmin, propuestas, reservations, socios],
-  );
-
   const upcomingReservations = useMemo(
-    () => reservations.filter((reservation) => new Date(reservation.end_time) >= new Date() && reservation.estado !== "RECHAZADA").slice(0, 6),
+    () => reservations.filter((r) => new Date(r.end_time) >= new Date() && r.estado !== "RECHAZADA").slice(0, 6),
     [reservations],
   );
   const conflictingReservation = useMemo(() => {
     if (!form.start_time || !form.end_time) return null;
-
     const start = new Date(form.start_time);
     const end = new Date(form.end_time);
     if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start >= end) return null;
-
-    return reservations.find((reservation) => overlapsReservation(reservation, start, end, editingId)) || null;
+    return reservations.find((r) => overlapsReservation(r, start, end, editingId)) || null;
   }, [editingId, form.end_time, form.start_time, reservations]);
 
   async function handleAuthSubmit(event) {
@@ -641,45 +70,19 @@ export default function Home() {
     setSaving(true);
     setError("");
     setStatus("");
-
     try {
       if (authMode === "register") {
-        await request(
-          "/auth/register/",
-          {
-            method: "POST",
-            body: JSON.stringify(authForm),
-          },
-          false,
-        );
+        await request("/auth/register/", { method: "POST", body: JSON.stringify(authForm) }, false);
         setStatus("Cuenta creada. Ya puedes iniciar sesion.");
         setAuthMode("login");
-        setAuthForm((current) => ({ ...current, password: "", password_two: "" }));
+        setAuthForm((c) => ({ ...c, password: "", password_two: "" }));
         return;
       }
-
-      const tokens = await request(
-        "/auth/login/",
-        {
-          method: "POST",
-          body: JSON.stringify({
-            username: authForm.username,
-            password: authForm.password,
-          }),
-        },
-        false,
-      );
+      const tokens = await request("/auth/login/", { method: "POST", body: JSON.stringify({ username: authForm.username, password: authForm.password }) }, false);
       const session = await loadProfile(tokens);
       updateAuth(session);
       setStatus("Sesion iniciada.");
-      setAuthForm({
-        username: "",
-        email: "",
-        password: "",
-        password_two: "",
-        first_name: "",
-        last_name: "",
-      });
+      setAuthForm({ username: "", email: "", password: "", password_two: "", first_name: "", last_name: "" });
     } catch (err) {
       setError(normalizeError(err));
     } finally {
@@ -687,56 +90,20 @@ export default function Home() {
     }
   }
 
-  async function handleLogout() {
-    setSaving(true);
-    setError("");
-    setStatus("");
-
-    try {
-      if (auth?.refresh) {
-        await request("/auth/logout/", {
-          method: "POST",
-          body: JSON.stringify({ refresh: auth.refresh }),
-        });
-      }
-    } catch {
-      // The local session is cleared even if the token is already invalid.
-    } finally {
-      updateAuth(null);
-      setSaving(false);
-      setStatus("Sesion cerrada.");
-    }
-  }
-
   async function handleReservationSubmit(event) {
     event.preventDefault();
-    if (!auth) {
-      setError("Inicia sesion para crear una reserva.");
-      return;
-    }
-    if (conflictingReservation) {
-      setError("Ese tramo ya esta reservado o solicitado. Elige otra hora.");
-      return;
-    }
-
+    if (!auth) { setError("Inicia sesion para crear una reserva."); return; }
+    if (conflictingReservation) { setError("Ese tramo ya esta reservado o solicitado. Elige otra hora."); return; }
     setSaving(true);
     setError("");
     setStatus("");
-
     try {
-      const payload = {
-        title: form.title.trim(),
-        start_time: new Date(form.start_time).toISOString(),
-        end_time: new Date(form.end_time).toISOString(),
-      };
-      await request(`/reservations/${editingId ? `${editingId}/` : ""}`, {
-        method: editingId ? "PUT" : "POST",
-        body: JSON.stringify(payload),
-      });
+      const payload = { title: form.title.trim(), start_time: new Date(form.start_time).toISOString(), end_time: new Date(form.end_time).toISOString() };
+      await request(`/reservations/${editingId ? `${editingId}/` : ""}`, { method: editingId ? "PUT" : "POST", body: JSON.stringify(payload) });
       await loadReservations();
       setEditingId(null);
       setForm(createDefaultForm(selectedDate));
-      setStatus(editingId ? "Reserva actualizada." : "Solicitud de reserva enviada (Queda pendiente de aprobación).");
+      setStatus(editingId ? "Reserva actualizada." : "Solicitud enviada (pendiente de aprobación).");
     } catch (err) {
       setError(normalizeError(err));
     } finally {
@@ -748,7 +115,6 @@ export default function Home() {
     setSaving(true);
     setError("");
     setStatus("");
-
     try {
       await request(`/reservations/${id}/`, { method: "DELETE" });
       await loadReservations();
@@ -761,439 +127,14 @@ export default function Home() {
     }
   }
 
-  async function handleSolicitarBaja() {
-    if (!window.confirm("¿Estás seguro de que quieres solicitar tu baja como socio?")) return;
-    setSaving(true);
-    try {
-      await request("/user/request-baja/", { method: "POST" });
-      setStatus("Solicitud de baja enviada. El administrador la procesará pronto.");
-      const refreshed = await loadProfile(auth);
-      updateAuth(refreshed);
-    } catch (err) {
-      setError(normalizeError(err));
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  // 👑 NUEVA ACCIÓN: CAMBIAR ESTADO DESDE EL DASHBOARD DE ADMIN (Aprobar / Rechazar)
   async function handleUpdateStatus(id, nuevoEstado) {
     setSaving(true);
     setError("");
     setStatus("");
     try {
-      await request(`/reservations/${id}/`, {
-        method: "PATCH",
-        body: JSON.stringify({ estado: nuevoEstado }),
-      });
+      await request(`/reservations/${id}/`, { method: "PATCH", body: JSON.stringify({ estado: nuevoEstado }) });
       await loadReservations();
-      setStatus(`Reserva actualizada a: ${nuevoEstado}`);
-    } catch (err) {
-      setError(normalizeError(err));
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  // 👥 ACCIONES DE ADMIN PARA GESTIONAR USUARIOS / SOCIOS
-  function startEditingSocio(socio) {
-    setEditingSocioId(socio.id);
-    setSocioForm({ ...socio });
-    // Hacemos scroll suave hacia el formulario
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }
-
-  function cancelEditingSocio() {
-    setEditingSocioId(null);
-    setSocioForm({
-      username: "",
-      email: "",
-      first_name: "",
-      last_name: "",
-      dni_nif: "",
-      telefono: "",
-      numero_socio: "",
-      fecha_nacimiento: "",
-      domicilio: "",
-      numero_casa: "",
-      piso: "",
-      letra: "",
-      localidad: "Tres Cantos",
-      codigo_postal: "28760",
-      email_secundario: "",
-      telefono_movil_2: "",
-      titular_cuenta: "",
-      nif_titular: "",
-      iban: "",
-      entidad_bancaria: "",
-      banco_entidad: "",
-      banco_sucursal: "",
-      banco_dc: "",
-      banco_cuenta: "",
-      familiares: [],
-      es_socio_otras_asoc: false,
-      cuales_otras_asoc: "",
-      autoriza_imagenes: false,
-      recibo_anual_pagado: false,
-      fecha_pago_recibo: "",
-      estado_socio: "NO_SOCIO",
-      is_staff: false,
-    });
-  }
-
-  async function handleCreateSocioSubmit(event) {
-    event.preventDefault();
-    setSaving(true);
-    setError("");
-    setStatus("");
-
-    try {
-      const formData = new FormData(event.target);
-      const data = Object.fromEntries(formData);
-
-      // Procesamos campos especiales (Checkboxes y JSON)
-      data.es_socio = true;
-      if (!data.estado_socio) {
-        data.estado_socio = editingSocioId ? socioForm.estado_socio : 'ACEPTADA';
-      }
-      data.autoriza_imagenes = formData.get("autoriza_imagenes") === "on";
-      data.es_socio_otras_asoc = formData.get("es_socio_otras_asoc") === "on";
-      data.recibo_anual_pagado = formData.get("recibo_anual_pagado") === "on";
-      data.is_staff = formData.get("is_staff") === "on";
-
-      const familiares = [];
-      for (let i = 1; i <= 5; i++) {
-        const nombre = formData.get(`fam_nombre_${i}`);
-        if (nombre) {
-          familiares.push({
-            nombre,
-            apellidos: formData.get(`fam_apellidos_${i}`),
-            nif: formData.get(`fam_nif_${i}`),
-            fnac: formData.get(`fam_fnac_${i}`)
-          });
-        }
-      }
-      data.familiares = familiares;
-
-      // Limpiamos campos numéricos y de fecha: si vienen como "" (vacío), los mandamos como null
-      // para que Django no devuelva error de validación de formato.
-      const payload = {
-        ...data,
-        numero_socio: data.numero_socio === "" ? null : data.numero_socio,
-        fecha_pago_recibo: data.fecha_pago_recibo === "" ? null : data.fecha_pago_recibo,
-        fecha_nacimiento: data.fecha_nacimiento === "" ? null : data.fecha_nacimiento,
-      };
-
-      const path = editingSocioId
-        ? `/admin/users/${editingSocioId}/`
-        : "/admin/users/";
-
-      await request(path, {
-        method: editingSocioId ? "PATCH" : "POST",
-        body: JSON.stringify(payload),
-      });
-
-      setStatus(
-        editingSocioId
-          ? "Usuario actualizado correctamente."
-          : "Socio registrado con éxito en el sistema digital."
-      );
-
-      cancelEditingSocio();
-      await loadSocios();
-    } catch (err) {
-      setError(normalizeError(err));
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function handleDeleteSocio(id) {
-    const confirmed = window.confirm(
-      "¿Seguro que quieres borrar este usuario? Esta acción no se puede deshacer."
-    );
-
-    if (!confirmed) return;
-
-    setSaving(true);
-    setError("");
-    setStatus("");
-
-    try {
-      await request(`/admin/users/${id}/`, {
-        method: "DELETE",
-      });
-
-      setStatus("Usuario eliminado correctamente.");
-
-      if (editingSocioId === id) {
-        cancelEditingSocio();
-      }
-
-      await loadSocios();
-    } catch (err) {
-      setError(normalizeError(err));
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  function cancelEditingPropuesta() {
-    setEditingPropuestaId(null);
-    setPropuestaForm({
-      titulo: "",
-      descripcion: "",
-      estado: "PENDIENTE",
-      fecha_registro: "",
-      numero_registro: "",
-      respuesta_admin: "",
-    });
-  }
-
-  function startEditingPropuesta(propuesta) {
-    setEditingPropuestaId(propuesta.id);
-    setPropuestaForm({ ...propuesta });
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }
-
-  async function handlePropuestaSubmit(event) {
-    event.preventDefault();
-    setSaving(true);
-    setError("");
-    setStatus("");
-    try {
-      const path = editingPropuestaId ? `/propuestas/${editingPropuestaId}/` : "/propuestas/";
-
-      // Limpiamos el payload: si fecha_registro es una cadena vacía, enviamos null
-      const payload = {
-        ...propuestaForm,
-        fecha_registro: propuestaForm.fecha_registro === "" ? null : propuestaForm.fecha_registro,
-      };
-
-      await request(path, {
-        method: editingPropuestaId ? "PUT" : "POST",
-        body: JSON.stringify(payload),
-      });
-      setStatus(editingPropuestaId ? "Propuesta actualizada." : "Propuesta enviada correctamente.");
-      cancelEditingPropuesta();
-      await loadPropuestas();
-    } catch (err) {
-      setError(normalizeError(err));
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function handleDeletePropuesta(id) {
-    if (!window.confirm("¿Borrar esta propuesta?")) return;
-    setSaving(true);
-    try {
-      await request(`/propuestas/${id}/`, { method: "DELETE" });
-      setStatus("Propuesta eliminada.");
-      await loadPropuestas();
-      if (editingPropuestaId === id) cancelEditingPropuesta();
-    } catch (err) {
-      setError(normalizeError(err));
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  function resetLibroForm() {
-    setEditingLibroId(null);
-    setLibroForm({
-      titulo: "",
-      autor: "",
-      editorial: "",
-      categoria: "",
-      isbn: "",
-      etiqueta: "",
-      disponibilidad: "DISPONIBLE",
-      activo: true,
-    });
-  }
-
-  function startEditingLibro(libro) {
-    setEditingLibroId(libro.id);
-    setLibroForm({
-      titulo: libro.titulo || "",
-      autor: libro.autor || "",
-      editorial: libro.editorial || "",
-      categoria: libro.categoria || "",
-      isbn: libro.isbn || "",
-      etiqueta: libro.etiqueta || "",
-      disponibilidad: libro.disponibilidad || "DISPONIBLE",
-      activo: Boolean(libro.activo),
-    });
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  }
-
-  async function handleLibroSubmit(event) {
-    event.preventDefault();
-    if (!isAdmin) return;
-    setSaving(true);
-    setError("");
-    setStatus("");
-    try {
-      const payload = {
-        ...libroForm,
-        titulo: libroForm.titulo.trim(),
-        autor: libroForm.autor.trim(),
-        editorial: libroForm.editorial.trim(),
-        categoria: libroForm.categoria.trim(),
-        isbn: libroForm.isbn.trim() || null,
-        etiqueta: libroForm.etiqueta.trim() || null,
-      };
-      await request(editingLibroId ? `/libros/${editingLibroId}/` : "/libros/", {
-        method: editingLibroId ? "PATCH" : "POST",
-        body: JSON.stringify(payload),
-      });
-      resetLibroForm();
-      await loadBiblioteca();
-      setStatus(editingLibroId ? "Libro actualizado." : "Libro creado.");
-    } catch (err) {
-      setError(normalizeError(err));
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function handleSolicitarLibro(libro) {
-    if (!auth) {
-      setError("Inicia sesion para solicitar prestamos.");
-      return;
-    }
-    setSaving(true);
-    setError("");
-    setStatus("");
-    try {
-      await request("/prestamos/libros/solicitar/", {
-        method: "POST",
-        body: JSON.stringify({ libro: libro.id }),
-      });
-      await loadBiblioteca();
-      setStatus("Solicitud enviada. Queda pendiente de aprobacion administrativa.");
-    } catch (err) {
-      setError(normalizeError(err));
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function handlePrestamoLibroAction(prestamo, action, payload = {}) {
-    setSaving(true);
-    setError("");
-    setStatus("");
-    try {
-      await request(`/admin/prestamos/libros/${prestamo.id}/${action}/`, {
-        method: "POST",
-        body: JSON.stringify(payload),
-      });
-      await loadBiblioteca();
-      setStatus("Prestamo actualizado.");
-    } catch (err) {
-      setError(normalizeError(err));
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function handleDeleteLibro(libro) {
-    if (!window.confirm(`¿Eliminar "${libro.titulo}" del catalogo?`)) return;
-    setSaving(true);
-    setError("");
-    setStatus("");
-    try {
-      await request(`/libros/${libro.id}/`, { method: "DELETE" });
-      await loadBiblioteca();
-      if (editingLibroId === libro.id) resetLibroForm();
-      setStatus("Libro eliminado del catalogo.");
-    } catch (err) {
-      setError(normalizeError(err));
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  function resetCompraForm() {
-    setCompraForm({
-      nombre: "",
-      precio_aproximado: "",
-      descripcion: "",
-      estado: "APROBADO",
-    });
-  }
-
-  async function handleCompraSubmit(event) {
-    event.preventDefault();
-    if (!auth) {
-      setError("Inicia sesion para usar la lista de la compra.");
-      return;
-    }
-    if (!canRequestCompras) {
-      setError("Solo los socios activos y las administradoras pueden solicitar objetos.");
-      return;
-    }
-
-    const precio = Number.parseFloat(compraForm.precio_aproximado);
-    if (Number.isNaN(precio)) {
-      setError("Introduce un precio aproximado valido.");
-      return;
-    }
-
-    setSaving(true);
-    setError("");
-    setStatus("");
-    try {
-      const payload = {
-        nombre: compraForm.nombre.trim(),
-        precio_aproximado: Number(precio.toFixed(2)),
-        descripcion: compraForm.descripcion.trim(),
-      };
-      if (isAdmin) {
-        payload.estado = compraForm.estado;
-      }
-
-      await request("/compras/", {
-        method: "POST",
-        body: JSON.stringify(payload),
-      });
-      resetCompraForm();
-      await loadCompras();
-      setStatus(isAdmin ? "Objeto añadido a la lista de la compra." : "Solicitud enviada correctamente.");
-    } catch (err) {
-      setError(normalizeError(err));
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function handleCompraAction(compra, action, successMessage) {
-    setSaving(true);
-    setError("");
-    setStatus("");
-    try {
-      await request(`/admin/compras/${compra.id}/${action}/`, {
-        method: "POST",
-      });
-      await loadCompras();
-      setStatus(successMessage);
-    } catch (err) {
-      setError(normalizeError(err));
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function handleDeleteCompra(compra) {
-    if (!window.confirm(`¿Eliminar "${compra.nombre}" de la lista de la compra?`)) return;
-    setSaving(true);
-    setError("");
-    setStatus("");
-    try {
-      await request(`/compras/${compra.id}/`, { method: "DELETE" });
-      await loadCompras();
-      setStatus("Objeto eliminado de la lista de la compra.");
+      setStatus(`Reserva ${nuevoEstado === "ACEPTADA" ? "aceptada" : "rechazada"}.`);
     } catch (err) {
       setError(normalizeError(err));
     } finally {
@@ -1205,22 +146,16 @@ export default function Home() {
     setEditingId(reservation.id);
     setSelectedDate(new Date(reservation.start_time));
     setViewDate(new Date(reservation.start_time));
-    setForm({
-      title: reservation.title,
-      start_time: toDateTimeLocal(reservation.start_time),
-      end_time: toDateTimeLocal(reservation.end_time),
-    });
+    setForm({ title: reservation.title, start_time: toDateTimeLocal(reservation.start_time), end_time: toDateTimeLocal(reservation.end_time) });
   }
 
   function changeMonth(offset) {
-    setViewDate((current) => new Date(current.getFullYear(), current.getMonth() + offset, 1));
+    setViewDate((c) => new Date(c.getFullYear(), c.getMonth() + offset, 1));
   }
 
   function handleSelectDate(day) {
     setSelectedDate(day);
-    if (!editingId) {
-      setForm(createDefaultForm(day));
-    }
+    if (!editingId) setForm(createDefaultForm(day));
   }
 
   function selectToday() {
@@ -1235,889 +170,122 @@ export default function Home() {
     reservationFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
-  return (
-    <main className="min-h-screen bg-[#f4f7f5] text-slate-950">
-      {/* CABECERA GLOBAL */}
-      <section className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 py-5 sm:px-6 lg:px-8">
-          {auth ? (
-            <div className="overflow-x-auto">
-              <div className="flex min-w-max gap-4 border-b border-slate-200">
-                <button
-                  className={`py-3 px-1 font-semibold text-sm border-b-2 transition ${activeTab === "calendar" ? "border-emerald-600 text-emerald-700" : "border-transparent text-slate-500 hover:text-slate-800"}`}
-                  onClick={() => setActiveTab("calendar")}
-                >
-                  📅 Calendario
-                </button>
-                <button
-                  className={`py-3 px-1 font-semibold text-sm border-b-2 transition ${activeTab === "profile" ? "border-emerald-600 text-emerald-700" : "border-transparent text-slate-500 hover:text-slate-800"}`}
-                  onClick={() => setActiveTab("profile")}
-                >
-                  👤 Mi Perfil
-                </button>
-                <button
-                  className={`py-3 px-1 font-semibold text-sm border-b-2 transition ${activeTab === "plenos" ? "border-emerald-600 text-emerald-700" : "border-transparent text-slate-500 hover:text-slate-800"}`}
-                  onClick={() => setActiveTab("plenos")}
-                >
-                  🏛️ Pleno
-                </button>
-                <button
-                  className={`py-3 px-1 font-semibold text-sm border-b-2 transition ${activeTab === "biblioteca" ? "border-emerald-600 text-emerald-700" : "border-transparent text-slate-500 hover:text-slate-800"}`}
-                  onClick={() => setActiveTab("biblioteca")}
-                >
-                  📚 Biblioteca
-                </button>
-                <button
-                  className={`py-3 px-1 font-semibold text-sm border-b-2 transition ${activeTab === "compras" ? "border-emerald-600 text-emerald-700" : "border-transparent text-slate-500 hover:text-slate-800"}`}
-                  onClick={() => setActiveTab("compras")}
-                >
-                  🛒 Lista de la compra
-                </button>
-                {isAdmin && (
-                  <>
-                    <button
-                      className={`py-3 px-1 font-semibold text-sm border-b-2 transition relative ${activeTab === "admin_reservations" ? "border-emerald-600 text-emerald-700" : "border-transparent text-slate-500 hover:text-slate-800"}`}
-                      onClick={() => setActiveTab("admin_reservations")}
-                    >
-                      ⏳ Solicitudes Pendientes
-                      {pendingAdminTotal > 0 && (
-                        <span className="ml-2 bg-amber-500 text-white text-xs px-1.5 py-0.5 rounded-full font-bold">
-                          {pendingAdminTotal}
-                        </span>
-                      )}
-                    </button>
-                    <button
-                      className={`py-3 px-1 font-semibold text-sm border-b-2 transition ${activeTab === "admin_socios" ? "border-emerald-600 text-emerald-700" : "border-transparent text-slate-500 hover:text-slate-800"}`}
-                      onClick={() => setActiveTab("admin_socios")}
-                    >
-                      👥 Libro Registro de Socios
-                    </button>
-                  </>
-                )}
-              </div>
-            </div>
-          ) : null}
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-700">
-              Centro de reservas {isAdmin && "• Panel de Control"}
-            </p>
-            <p className="mt-2 text-sm text-slate-600">
-              Las pestañas de arriba son la navegación principal. Cada sección muestra sus propios controles dentro.
-            </p>
-          </div>
-        </div>
-      </section>
-
-      {/* ALERTAS */}
-      {(status || error) && (
-        <section className={`app-alert ${error ? "app-alert-error" : "app-alert-ok"}`} role={error ? "alert" : "status"}>
-          <div>
-            <strong>{error ? "Error" : "Correcto"}</strong>
-            <span>{error || status}</span>
-          </div>
-          <button
-            type="button"
-            onClick={() => {
-              setError("");
-              setStatus("");
-            }}
-            aria-label="Cerrar alerta"
-          >
-            ×
-          </button>
-        </section>
-      )}
-
-      {/* ======================================================== */}
-      {/* VISTA 1: CALENDARIO TRADICIONAL (Para todos los usuarios) */}
-      {/* ======================================================== */}
-      {activeTab === "calendar" && (
-        <div className="mx-auto w-full max-w-7xl space-y-5 px-4 py-5 sm:px-6 lg:px-8">
-          <section className="panel">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+  if (!auth) {
+    return (
+      <main className="min-h-screen text-slate-950">
+        <Alert status={status} error={error} onClose={() => { setError(""); setStatus(""); }} />
+        <div className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+          <div className="grid gap-5 lg:grid-cols-[minmax(0,1.1fr)_420px]">
+            <section className="panel flex flex-col justify-between gap-6">
               <div>
-                <h1 className="text-3xl font-semibold tracking-normal text-slate-950 sm:text-4xl">
-                  Calendario de sala comunitaria
+                <p className="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-700">Bienvenido</p>
+                <h1 className="mt-3 text-3xl font-semibold tracking-normal text-slate-950 sm:text-4xl">
+                  Gestiona reservas, compras y vida del centro desde un solo sitio.
                 </h1>
-                <p className="mt-2 text-sm text-slate-600">
-                  Aquí tienes los controles del calendario.
+                <p className="mt-4 max-w-2xl text-base text-slate-600">
+                  Al iniciar sesión verás tus pestañas disponibles según tu rol: calendario, perfil, biblioteca, plenos y las herramientas de administración si te corresponden.
                 </p>
               </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <button className="btn btn-secondary" type="button" onClick={selectToday}>
-                  Hoy
-                </button>
-                <button className="btn btn-secondary icon-btn" type="button" onClick={() => changeMonth(-1)} aria-label="Mes anterior">
-                  ‹
-                </button>
-                <button className="btn btn-secondary icon-btn" type="button" onClick={() => changeMonth(1)} aria-label="Mes siguiente">
-                  ›
-                </button>
-                <button className="btn btn-primary" type="button" onClick={handleStartNewReservation} disabled={!auth}>
-                  + Nueva reserva
-                </button>
-              </div>
-            </div>
-            <div className="mt-5 grid gap-3 sm:grid-cols-3">
-              <Metric label="Reservas totales" value={reservations.filter((r) => r.estado !== "RECHAZADA").length} />
-              <Metric label="Proximas aprobadas" value={upcomingReservations.length} />
-              <Metric label="Mis reservas" value={auth ? myReservations.length : "-"} />
-            </div>
-          </section>
-
-          <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_380px]">
-            <section className="panel">
-              <div className="calendar-head">
-                <div>
-                  <h2 className="text-xl font-semibold capitalize text-slate-950">{MONTH_FORMAT.format(viewDate)}</h2>
-                  <p className="mt-1 text-sm text-slate-600">Selecciona un dia para ver su agenda y crear reservas.</p>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-sm font-semibold text-slate-900">Reservas</p>
+                  <p className="mt-2 text-sm text-slate-600">Consulta agenda, solicita espacios y revisa tus reservas.</p>
                 </div>
-              </div>
-
-              <div className="calendar-grid mt-5">
-                {WEEKDAYS.map((day) => (
-                  <div className="weekday" key={day}>
-                    {day}
-                  </div>
-                ))}
-                {calendarDays.map((day) => {
-                  const key = dateKey(day);
-                  const dayReservations = reservationsByDay[key] || [];
-                  const isCurrentMonth = monthKey(day) === monthKey(viewDate);
-                  const isSelected = key === selectedKey;
-                  const isToday = key === dateKey(new Date());
-
-                  return (
-                    <button
-                      className={`calendar-day ${isCurrentMonth ? "" : "muted"} ${isSelected ? "selected" : ""}`}
-                      key={key}
-                      type="button"
-                      onClick={() => handleSelectDate(day)}
-                    >
-                      <span className="day-number">
-                        {day.getDate()}
-                        {isToday ? <span className="today-dot" aria-label="Hoy" /> : null}
-                      </span>
-                      <span className="day-stack">
-                        {dayReservations.slice(0, 3).map((reservation) => {
-                          const est = reservation.estado || "PENDIENTE";
-                          let statusIndicator = "";
-                          let pillClass = "reservation-pill";
-
-                          if (reservation.user_username === currentUser) {
-                            pillClass += " reservation-pill-mine";
-                          }
-
-                          if (est === "PENDIENTE") {
-                            statusIndicator = " ⏳ PENDIENTE";
-                            pillClass += " reservation-pill-pending";
-                          } else if (est === "RECHAZADA") {
-                            statusIndicator = " ✕";
-                            pillClass += " reservation-pill-rejected";
-                          } else if (est === "ACEPTADA") {
-                            pillClass += " reservation-pill-accepted";
-                          }
-
-                          return (
-                            <span className={pillClass} key={reservation.id}>
-                              {TIME_FORMAT.format(new Date(reservation.start_time))} {reservation.title}{statusIndicator}
-                            </span>
-                          );
-                        })}
-                        {dayReservations.length > 3 ? <span className="more-pill">+{dayReservations.length - 3} mas</span> : null}
-                      </span>
-                    </button>
-                  );
-                })}
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-sm font-semibold text-slate-900">Socios</p>
+                  <p className="mt-2 text-sm text-slate-600">Accede a tu perfil, solicitudes y secciones internas del centro.</p>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-sm font-semibold text-slate-900">Administración</p>
+                  <p className="mt-2 text-sm text-slate-600">Gestión centralizada para aprobaciones, compras y registro de socios.</p>
+                </div>
               </div>
             </section>
 
-            <aside className="flex flex-col gap-5">
-              <section className="panel">
-                {auth ? (
-                  <div className="account">
-                    <div>
-                      <p className="text-sm text-slate-600">Sesion activa {isAdmin && "👑"}</p>
-                      <h2 className="text-lg font-semibold text-slate-950">{auth.profile?.first_name || auth.profile?.username}</h2>
-                      <p className="text-sm text-slate-500">{auth.profile?.email || "Sin email registrado"}</p>
-                    </div>
-                    <button className="btn btn-secondary" type="button" onClick={handleLogout} disabled={saving}>
-                      Salir
-                    </button>
-                  </div>
-                ) : (
-                  <AuthForm
-                    authForm={authForm}
-                    authMode={authMode}
-                    saving={saving}
-                    setAuthForm={setAuthForm}
-                    setAuthMode={setAuthMode}
-                    onSubmit={handleAuthSubmit}
-                  />
-                )}
-              </section>
-
-              <section className="panel">
-                <div className="section-title">
-                  <h2 className="text-lg font-semibold text-slate-950">Agenda del dia</h2>
-                  <p className="text-sm capitalize text-slate-600">{DAY_FORMAT.format(selectedDate)}</p>
-                </div>
-
-                <div className="mt-4 flex flex-col gap-3">
-                  {loading ? <p className="empty">Cargando reservas...</p> : null}
-                  {!loading && todaysReservations.length === 0 ? <p className="empty">No hay reservas para este dia.</p> : null}
-                  {todaysReservations.map((reservation) => (
-                    <ReservationItem
-                      currentUser={currentUser}
-                      isAdmin={isAdmin}
-                      key={reservation.id}
-                      reservation={reservation}
-                      saving={saving}
-                      onDelete={handleDelete}
-                      onEdit={startEditing}
-                      onUpdateStatus={handleUpdateStatus}
-                    />
-                  ))}
-                </div>
-              </section>
-
-              <section className="panel" ref={reservationFormRef}>
-                <div className="section-title">
-                  <h2 className="text-lg font-semibold text-slate-950">{editingId ? "Editar reserva" : "Crear reserva"}</h2>
-                  <p className="text-sm text-slate-600">{auth ? "La solicitud se enviará a revisión." : "Inicia sesion para guardar cambios."}</p>
-                </div>
-
-                <form className="mt-4 flex flex-col gap-3" onSubmit={handleReservationSubmit}>
-                  <label className="field">
-                    <span>Titulo</span>
-                    <input
-                      required
-                      disabled={!auth || saving}
-                      maxLength={100}
-                      value={form.title}
-                      onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))}
-                      placeholder="Reunion de vecinos"
-                    />
-                  </label>
-                  <label className="field">
-                    <span>Inicio</span>
-                    <input
-                      required
-                      disabled={!auth || saving}
-                      type="datetime-local"
-                      value={form.start_time}
-                      onChange={(event) =>
-                        setForm((current) => ({
-                          ...current,
-                          start_time: event.target.value,
-                          end_time: current.end_time <= event.target.value ? addMinutes(event.target.value, 60) : current.end_time,
-                        }))
-                      }
-                    />
-                  </label>
-                  <label className="field">
-                    <span>Fin</span>
-                    <input
-                      required
-                      disabled={!auth || saving}
-                      type="datetime-local"
-                      value={form.end_time}
-                      onChange={(event) => setForm((current) => ({ ...current, end_time: event.target.value }))}
-                    />
-                  </label>
-
-                  {conflictingReservation ? (
-                    <div className="conflict-warning" role="alert">
-                      <strong>Tramo ocupado</strong>
-                      <span>
-                        {TIME_FORMAT.format(new Date(conflictingReservation.start_time))} - {TIME_FORMAT.format(new Date(conflictingReservation.end_time))} por{" "}
-                        {conflictingReservation.user_username || "otro usuario"}.
-                      </span>
-                    </div>
-                  ) : (
-                    <div className="availability-ok" role="status">
-                      Tramo disponible segun las reservas cargadas.
-                    </div>
-                  )}
-
-                  <div className="flex flex-wrap gap-2 pt-1">
-                    <button className="btn btn-primary" type="submit" disabled={!auth || saving || Boolean(conflictingReservation)}>
-                      {saving ? "Guardando..." : editingId ? "Actualizar" : "Enviar Solicitud"}
-                    </button>
-                    {editingId ? (
-                      <button
-                        className="btn btn-secondary"
-                        type="button"
-                        onClick={() => {
-                          setEditingId(null);
-                          setForm(createDefaultForm(selectedDate));
-                        }}
-                      >
-                        Cancelar
-                      </button>
-                    ) : null}
-                  </div>
-                </form>
-              </section>
-            </aside>
-          </div>
-        </div>
-      )}
-
-      {/* ======================================================== */}
-      {/* VISTA 2: BANDEJA DE VALIDACIÓN (Exclusivo Administradores)*/}
-      {/* ======================================================== */}
-      {activeTab === "admin_reservations" && (
-        <div className="mx-auto w-full max-w-7xl px-4 py-5 sm:px-6 lg:px-8 space-y-8">
-          <section className="panel">
-            <h2 className="text-xl font-bold text-slate-950 mb-2">Solicitudes de Reserva Pendientes</h2>
-            <p className="text-sm text-slate-600 mb-6">Aquí se listan los huecos que los vecinos han pedido pero aún no están aprobados oficialmente.</p>
-
-            {reservations.filter((r) => r.estado === "PENDIENTE").length === 0 ? (
-              <p className="text-center py-8 text-slate-500 font-medium bg-slate-50 border border-dashed rounded-lg">
-                🎉 ¡Todo al día! No quedan solicitudes pendientes de aprobación.
-              </p>
-            ) : (
-              <div className="flex flex-col gap-4">
-                {reservations.filter((r) => r.estado === "PENDIENTE").map((r) => (
-                  <div key={r.id} className="bg-white border border-amber-200 rounded-xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm hover:border-amber-300 transition">
-                    <div>
-                      <span className="bg-amber-100 text-amber-800 text-xs px-2 py-0.5 rounded font-semibold uppercase tracking-wide">Pendiente</span>
-                      <h3 className="font-bold text-slate-900 text-lg mt-1">{r.title}</h3>
-                      <p className="text-sm text-slate-600">Solicitado por: <span className="font-semibold text-slate-800">@{r.user_username}</span></p>
-                      <p className="text-sm text-emerald-800 font-medium mt-2 flex items-center gap-1">
-                        📅 {DAY_FORMAT.format(new Date(r.start_time))} | ⏰ {TIME_FORMAT.format(new Date(r.start_time))} - {TIME_FORMAT.format(new Date(r.end_time))}
-                      </p>
-                    </div>
-                    <div className="flex sm:flex-col gap-2 shrink-0">
-                      <button className="bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold text-sm hover:bg-emerald-700 shadow-sm transition" onClick={() => handleUpdateStatus(r.id, "ACEPTADA")} disabled={saving}>
-                        Aceptar Reserva
-                      </button>
-                      <button className="bg-rose-50 text-rose-700 border border-rose-200 px-4 py-2 rounded-lg font-semibold text-sm hover:bg-rose-100 transition" onClick={() => handleUpdateStatus(r.id, "RECHAZADA")} disabled={saving}>
-                        Rechazar
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
-
-          <section className="panel">
-            <h2 className="text-xl font-bold text-slate-950 mb-2">Solicitudes de Prestamo de Libros</h2>
-            <p className="text-sm text-slate-600 mb-6">Libros solicitados por socios que esperan aprobacion administrativa.</p>
-
-            {prestamosPendientesAdmin.length === 0 ? (
-              <p className="text-center py-8 text-slate-500 font-medium bg-slate-50 border border-dashed rounded-lg">
-                No hay solicitudes de libros pendientes.
-              </p>
-            ) : (
-              <div className="flex flex-col gap-4">
-                {prestamosPendientesAdmin.map((prestamo) => (
-                  <div key={prestamo.id} className="bg-white border border-amber-200 rounded-xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm hover:border-amber-300 transition">
-                    <div>
-                      <span className="bg-amber-100 text-amber-800 text-xs px-2 py-0.5 rounded font-semibold uppercase tracking-wide">Libro pendiente</span>
-                      <h3 className="font-bold text-slate-900 text-lg mt-1">{prestamo.libro_titulo}</h3>
-                      <p className="text-sm text-slate-600">Solicitado por: <span className="font-semibold text-slate-800">@{prestamo.usuario_username}</span></p>
-                      <p className="text-sm text-slate-500 mt-2">{prestamo.libro_autor || "Autoria no indicada"}</p>
-                    </div>
-                    <div className="flex flex-wrap sm:flex-col gap-2 shrink-0">
-                      <button className="bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold text-sm hover:bg-emerald-700 shadow-sm transition" onClick={() => handlePrestamoLibroAction(prestamo, "aprobar")} disabled={saving}>
-                        Aprobar prestamo
-                      </button>
-                      <button className="bg-blue-50 text-blue-700 border border-blue-200 px-4 py-2 rounded-lg font-semibold text-sm hover:bg-blue-100 transition" onClick={() => handlePrestamoLibroAction(prestamo, "prestar")} disabled={saving}>
-                        Marcar entregado
-                      </button>
-                      <button className="bg-rose-50 text-rose-700 border border-rose-200 px-4 py-2 rounded-lg font-semibold text-sm hover:bg-rose-100 transition" onClick={() => {
-                        const motivo = window.prompt("Motivo de rechazo (opcional)") || "";
-                        handlePrestamoLibroAction(prestamo, "rechazar", { motivo_rechazo: motivo });
-                      }} disabled={saving}>
-                        Rechazar
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
-
-          <section className="panel">
-            <h2 className="text-xl font-bold text-slate-950 mb-2">Solicitudes de Lista de la Compra</h2>
-            <p className="text-sm text-slate-600 mb-6">Objetos pedidos por socios que esperan revisión o compra.</p>
-
-            {comprasPendientesAdmin.length === 0 ? (
-              <p className="text-center py-8 text-slate-500 font-medium bg-slate-50 border border-dashed rounded-lg">
-                No hay objetos pendientes en la lista de la compra.
-              </p>
-            ) : (
-              <div className="flex flex-col gap-4">
-                {comprasPendientesAdmin.map((compra) => (
-                  <div key={compra.id} className="bg-white border border-amber-200 rounded-xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm hover:border-amber-300 transition">
-                    <div>
-                      <span className="bg-amber-100 text-amber-800 text-xs px-2 py-0.5 rounded font-semibold uppercase tracking-wide">Compra solicitada</span>
-                      <h3 className="font-bold text-slate-900 text-lg mt-1">{compra.nombre}</h3>
-                      <p className="text-sm text-slate-600">Solicitado por: <span className="font-semibold text-slate-800">@{compra.solicitante_username}</span></p>
-                      <p className="text-sm text-emerald-800 font-medium mt-2">{CURRENCY_FORMAT.format(Number(compra.precio_aproximado || 0))}</p>
-                      {compra.descripcion ? <p className="text-sm text-slate-500 mt-2">{compra.descripcion}</p> : null}
-                    </div>
-                    <div className="flex flex-wrap sm:flex-col gap-2 shrink-0">
-                      <button className="bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold text-sm hover:bg-emerald-700 shadow-sm transition" onClick={() => handleCompraAction(compra, "aprobar", `Compra "${compra.nombre}" aprobada.`)} disabled={saving}>
-                        Aprobar
-                      </button>
-                      <button className="bg-blue-50 text-blue-700 border border-blue-200 px-4 py-2 rounded-lg font-semibold text-sm hover:bg-blue-100 transition" onClick={() => handleCompraAction(compra, "comprado", `Compra "${compra.nombre}" marcada como comprada.`)} disabled={saving}>
-                        Marcar comprada
-                      </button>
-                      <button className="bg-rose-50 text-rose-700 border border-rose-200 px-4 py-2 rounded-lg font-semibold text-sm hover:bg-rose-100 transition" onClick={() => handleCompraAction(compra, "rechazar", `Compra "${compra.nombre}" rechazada.`)} disabled={saving}>
-                        Rechazar
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
-
-          <section className="panel">
-            <h2 className="text-xl font-bold text-slate-950 mb-2">Solicitudes de Nuevo Socio</h2>
-            <p className="text-sm text-slate-600 mb-6">Vecinos que han completado su ficha y esperan validación administrativa.</p>
-
-            {socios.filter((s) => s.estado_socio === "PENDIENTE").length === 0 ? (
-              <p className="text-center py-8 text-slate-500 font-medium bg-slate-50 border border-dashed rounded-lg">
-                🎉 ¡Todo al día! No hay nuevas solicitudes de alta como socio.
-              </p>
-            ) : (
-              <div className="flex flex-col gap-4">
-                {socios.filter((s) => s.estado_socio === "PENDIENTE").map((s) => (
-                  <div key={s.id} className="bg-white border border-emerald-200 rounded-xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm hover:border-emerald-300 transition">
-                    <div>
-                      <span className="bg-emerald-100 text-emerald-800 text-xs px-2 py-0.5 rounded font-semibold uppercase tracking-wide">Alta Solicitada</span>
-                      <h3 className="font-bold text-slate-900 text-lg mt-1">{s.last_name ? `${s.last_name}, ${s.first_name}` : s.first_name || s.username}</h3>
-                      <p className="text-sm text-slate-600">Usuario: <span className="font-semibold text-slate-800">@{s.username}</span> | Email: {s.email}</p>
-                      <p className="text-sm text-emerald-800 font-medium mt-2">DNI: {s.dni_nif} | Tel: {s.telefono}</p>
-                    </div>
-                    <div className="flex flex-wrap sm:flex-col gap-2 shrink-0">
-                      <button className="bg-slate-100 text-slate-700 border border-slate-200 px-4 py-2 rounded-lg font-semibold text-sm hover:bg-slate-200 transition" onClick={() => setViewingSocioDetails(s)}>
-                        Ver Ficha Completa
-                      </button>
-                      <button className="bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold text-sm hover:bg-emerald-700 shadow-sm transition" onClick={async () => {
-                        await request(`/admin/users/${s.id}/`, { method: "PATCH", body: JSON.stringify({ estado_socio: 'ACEPTADA' }) });
-                        await loadSocios();
-                        setStatus(`Socio @${s.username} aprobado.`);
-                      }} disabled={saving}>
-                        Aprobar Socio
-                      </button>
-                      <button className="bg-rose-50 text-rose-700 border border-rose-200 px-4 py-2 rounded-lg font-semibold text-sm hover:bg-rose-100 transition" onClick={async () => {
-                        if (confirm(`¿Rechazar solicitud de @${s.username}?`)) {
-                          await request(`/admin/users/${s.id}/`, { method: "PATCH", body: JSON.stringify({ estado_socio: 'RECHAZADA' }) });
-                          await loadSocios();
-                        }
-                      }} disabled={saving}>
-                        Rechazar
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
-
-          <section className="panel">
-            <h2 className="text-xl font-bold text-slate-950 mb-2">Propuestas de Pleno Pendientes</h2>
-            <p className="text-sm text-slate-600 mb-6">Peticiones ciudadanas que esperan ser revisadas o registradas.</p>
-
-            {propuestas.filter((p) => p.estado === "PENDIENTE").length === 0 ? (
-              <p className="text-center py-8 text-slate-500 font-medium bg-slate-50 border border-dashed rounded-lg">
-                🎉 No hay propuestas de pleno pendientes.
-              </p>
-            ) : (
-              <div className="flex flex-col gap-4">
-                {propuestas.filter((p) => p.estado === "PENDIENTE").map((p) => (
-                  <div key={p.id} className="bg-white border border-emerald-200 rounded-xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm hover:border-emerald-300 transition">
-                    <div>
-                      <span className="bg-amber-100 text-amber-800 text-xs px-2 py-0.5 rounded font-semibold uppercase tracking-wide">Propuesta Pendiente</span>
-                      <h3 className="font-bold text-slate-900 text-lg mt-1">{p.titulo}</h3>
-                      <p className="text-sm text-slate-600">Enviada por: <span className="font-semibold text-slate-800">@{p.vecino_username}</span></p>
-                      <p className="text-sm text-slate-500 mt-2 italic line-clamp-1">&quot;{p.descripcion}&quot;</p>
-                    </div>
-                    <div className="flex flex-wrap sm:flex-col gap-2 shrink-0">
-                      <button className="bg-slate-100 text-slate-700 border border-slate-200 px-4 py-2 rounded-lg font-semibold text-sm hover:bg-slate-200 transition"
-                        onClick={() => {
-                          setActiveTab("plenos");
-                          startEditingPropuesta(p);
-                        }}>
-                        Gestionar en Plenos
-                      </button>
-                      <button className="bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold text-sm hover:bg-emerald-700 shadow-sm transition" onClick={async () => {
-                        await request(`/propuestas/${p.id}/`, { method: "PATCH", body: JSON.stringify({ estado: 'PRESENTADA' }) });
-                        await loadPropuestas();
-                      }} disabled={saving}>
-                        Marcar como Presentada
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
-        </div>
-      )}
-
-      {/* ======================================================== */}
-      {/* VISTA: MI PERFIL / SOLICITUD DE SOCIO */}
-      {/* ======================================================== */}
-      {activeTab === "profile" && (
-        <div className="mx-auto w-full max-w-7xl px-4 py-5 sm:px-6 lg:px-8">
-          <div className="grid gap-5 lg:grid-cols-2">
             <section className="panel">
-              <h2 className="text-xl font-bold text-slate-950 mb-4">Membresía</h2>
-              <div className="flex flex-col gap-4">
-                <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
-                  <div className="flex justify-between items-start mb-2">
-                    <span className="text-xs font-bold uppercase text-slate-500">Estado Actual</span>
-                    <span className={`text-xs px-2 py-1 rounded font-bold ${auth.profile?.estado_socio === 'ACEPTADA' ? 'bg-emerald-100 text-emerald-800' :
-                        auth.profile?.estado_socio === 'PENDIENTE' ? 'bg-amber-100 text-amber-800' :
-                          'bg-slate-200 text-slate-700'
-                      }`}>
-                      {translateText(auth.profile?.estado_socio)}
-                    </span>
-                  </div>
-                  <p className="text-slate-900 font-medium">@{auth.profile?.username}</p>
-                  {auth.profile?.numero_socio && (
-                    <p className="mt-2 text-emerald-700 font-bold">Número de Socio: {auth.profile.numero_socio}</p>
-                  )}
-                </div>
-
-                {auth.profile?.estado_socio === 'ACEPTADA' && (
-                  <button className="btn btn-secondary text-rose-600 border-rose-200 hover:bg-rose-50" onClick={handleSolicitarBaja} disabled={saving}>
-                    Solicitar Baja del Centro
-                  </button>
-                )}
+              <h2 className="text-2xl font-semibold text-slate-950">Acceso</h2>
+              <p className="mt-2 text-sm text-slate-600">
+                Entra con tu cuenta o regístrate para solicitar el alta y empezar a usar la plataforma.
+              </p>
+              <div className="mt-5">
+                <AuthForm authForm={authForm} authMode={authMode} saving={saving}
+                  setAuthForm={setAuthForm} setAuthMode={setAuthMode} onSubmit={handleAuthSubmit} />
               </div>
             </section>
-
-            <form className="lg:col-span-2 space-y-6" onSubmit={async (e) => {
-              e.preventDefault();
-              setSaving(true);
-              try {
-                const formData = new FormData(e.target);
-                const data = Object.fromEntries(formData);
-
-                // Construimos el array de familiares desde los inputs dinámicos
-                const familiares = [];
-                for (let i = 1; i <= 5; i++) {
-                  const nombre = formData.get(`fam_nombre_${i}`);
-                  if (nombre) {
-                    familiares.push({
-                      nombre,
-                      apellidos: formData.get(`fam_apellidos_${i}`),
-                      nif: formData.get(`fam_nif_${i}`),
-                      fnac: formData.get(`fam_fnac_${i}`)
-                    });
-                  }
-                }
-                data.familiares = familiares;
-                data.autoriza_imagenes = formData.get("autoriza_imagenes") === "on";
-                data.es_socio_otras_asoc = formData.get("es_socio_otras_asoc") === "on";
-
-                // Comprobamos si el usuario ya estaba en el sistema (socio, pendiente o baja solicitada)
-                const isAlreadyRegistered = auth.profile?.estado_socio !== 'NO_SOCIO' && auth.profile?.estado_socio !== 'RECHAZADA';
-                await request("/user/profile/", { method: "PUT", body: JSON.stringify(data) });
-                const session = await loadProfile(auth);
-                updateAuth(session);
-                setStatus(isAlreadyRegistered ? "Perfil actualizado correctamente." : "Ficha de socio completada. Tu solicitud de alta ha sido enviada.");
-              } catch (err) { setError(normalizeError(err)); } finally { setSaving(false); }
-            }}>
-              <div className="grid gap-6 lg:grid-cols-2">
-                <section className="panel">
-                  <h3 className="font-bold text-lg mb-4 flex items-center gap-2">📋 1. Datos Personales</h3>
-                  <div className="grid grid-cols-2 gap-3">
-                    <label className="field"><span>Nombre</span><input name="first_name" defaultValue={auth.profile?.first_name} required /></label>
-                    <label className="field"><span>Apellidos</span><input name="last_name" defaultValue={auth.profile?.last_name} required /></label>
-                    <label className="field"><span>NIF (DNI/NIE)</span><input name="dni_nif" defaultValue={auth.profile?.dni_nif} required /></label>
-                    <label className="field"><span>Fecha Nacimiento</span><input type="date" name="fecha_nacimiento" defaultValue={auth.profile?.fecha_nacimiento} /></label>
-                  </div>
-                  <div className="mt-3 grid grid-cols-4 gap-3">
-                    <label className="field col-span-2"><span>Calle/Vía</span><input name="domicilio" defaultValue={auth.profile?.domicilio} /></label>
-                    <label className="field"><span>Nº</span><input name="numero_casa" defaultValue={auth.profile?.numero_casa} /></label>
-                    <label className="field"><span>Piso/Letra</span><input name="piso" placeholder="2º B" defaultValue={auth.profile?.piso} /></label>
-                  </div>
-                  <div className="mt-3 grid grid-cols-2 gap-3">
-                    <label className="field"><span>Email Principal</span><input type="email" name="email" defaultValue={auth.profile?.email} required /></label>
-                    <label className="field"><span>Teléfono Principal</span><input name="telefono" defaultValue={auth.profile?.telefono} required /></label>
-                  </div>
-                </section>
-
-                <section className="panel">
-                  <h3 className="font-bold text-lg mb-4 flex items-center gap-2">💳 2. Datos Bancarios</h3>
-                  <div className="grid gap-3">
-                    <label className="field"><span>Titular Cuenta</span><input name="titular_cuenta" defaultValue={auth.profile?.titular_cuenta} /></label>
-                    <label className="field"><span>IBAN Completo</span><input name="iban" defaultValue={auth.profile?.iban} placeholder="ES00 0000..." /></label>
-                    <div className="grid grid-cols-4 gap-2 bg-slate-50 p-2 rounded border border-dashed border-slate-300">
-                      <label className="field"><span>Entidad</span><input name="banco_entidad" maxLength="4" defaultValue={auth.profile?.banco_entidad} /></label>
-                      <label className="field"><span>Sucursal</span><input name="banco_sucursal" maxLength="4" defaultValue={auth.profile?.banco_sucursal} /></label>
-                      <label className="field"><span>DC</span><input name="banco_dc" maxLength="2" defaultValue={auth.profile?.banco_dc} /></label>
-                      <label className="field"><span>Nº Cuenta</span><input name="banco_cuenta" maxLength="10" defaultValue={auth.profile?.banco_cuenta} /></label>
-                    </div>
-                  </div>
-                </section>
-
-                <section className="panel lg:col-span-2">
-                  <h3 className="font-bold text-lg mb-4 flex items-center gap-2">👥 3. Cuota Familiar (Hasta 5 adicionales)</h3>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="text-left text-slate-500 uppercase text-[10px] tracking-wider">
-                          <th className="pb-2">Nombre</th>
-                          <th className="pb-2">Apellidos</th>
-                          <th className="pb-2">NIF</th>
-                          <th className="pb-2">Fecha Nac.</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {[1, 2, 3, 4, 5].map((idx) => {
-                          const fam = auth.profile?.familiares?.[idx - 1] || {};
-                          return (
-                            <tr key={idx}>
-                              <td className="py-1 pr-2"><input name={`fam_nombre_${idx}`} defaultValue={fam.nombre} className="w-full text-xs p-1 border rounded" /></td>
-                              <td className="py-1 pr-2"><input name={`fam_apellidos_${idx}`} defaultValue={fam.apellidos} className="w-full text-xs p-1 border rounded" /></td>
-                              <td className="py-1 pr-2"><input name={`fam_nif_${idx}`} defaultValue={fam.nif} className="w-full text-xs p-1 border rounded" /></td>
-                              <td className="py-1"><input type="date" name={`fam_fnac_${idx}`} defaultValue={fam.fnac} className="w-full text-xs p-1 border rounded" /></td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                </section>
-
-                <section className="panel lg:col-span-2">
-                  <h3 className="font-bold text-lg mb-4 flex items-center gap-2">🔍 4. Información y Autorizaciones</h3>
-                  <div className="space-y-4">
-                    <div className="flex items-start gap-3">
-                      <input type="checkbox" id="es_socio_otras_asoc" name="es_socio_otras_asoc" defaultChecked={auth.profile?.es_socio_otras_asoc} className="mt-1" />
-                      <label htmlFor="es_socio_otras_asoc" className="text-sm">¿Eres socio de alguna otra asociación de Tres Cantos?</label>
-                    </div>
-                    <label className="field"><span>Indica cuáles</span><input name="cuales_otras_asoc" defaultValue={auth.profile?.cuales_otras_asoc} placeholder="Ej: Cruz Roja, ARBA..." /></label>
-                    <hr />
-                    <div className="flex items-start gap-3 bg-emerald-50 p-3 rounded border border-emerald-100">
-                      <input type="checkbox" id="autoriza_imagenes" name="autoriza_imagenes" defaultChecked={auth.profile?.autoriza_imagenes} className="mt-1" required />
-                      <label htmlFor="autoriza_imagenes" className="text-xs text-emerald-900 leading-relaxed">
-                        <b>Autorización de Imágenes:</b> Doy mi consentimiento para la publicación de fotos/videos de las actividades de la asociación donde aparezca en la web y redes sociales de la entidad.
-                      </label>
-                    </div>
-                  </div>
-                </section>
-              </div>
-              <div className="flex justify-end">
-                <button className="btn btn-primary px-12 py-3 text-lg" type="submit" disabled={saving}>
-                  {saving
-                    ? "Guardando..."
-                    : (auth.profile?.estado_socio !== 'NO_SOCIO' && auth.profile?.estado_socio !== 'RECHAZADA')
-                      ? "Guardar cambios del perfil"
-                      : "Guardar y Tramitar Alta como Socio"}
-                </button>
-              </div>
-            </form>
           </div>
         </div>
-      )}
+      </main>
+    );
+  }
 
-      {/* ======================================================== */}
-      {/* VISTA 4: PROPUESTAS PLENO */}
-      {/* ======================================================== */}
-      {activeTab === "plenos" && (
-        <div className="mx-auto w-full max-w-7xl px-4 py-5 sm:px-6 lg:px-8 space-y-8">
-          <section className="panel">
-            <h2 className="text-xl font-bold text-slate-950 mb-1">Propuestas para el Pleno Municipal</h2>
-            <p className="text-sm text-slate-600 mb-6">
-              {isAdmin
-                ? "Gestión de las peticiones ciudadanas para presentar al Ayuntamiento."
-                : "Envía tus propuestas o quejas para que la asociación las presente en el próximo pleno."}
-            </p>
+  return (
+    <main className="min-h-screen text-slate-950">
+      <Alert status={status} error={error} onClose={() => { setError(""); setStatus(""); }} />
 
-            <div className="mb-6 flex flex-col sm:flex-row sm:items-end gap-6">
-              <label className="field max-w-md flex-1">
-                <span>Buscar propuesta</span>
-                <input
-                  value={propuestaSearch}
-                  onChange={(event) => setPropuestaSearch(event.target.value)}
-                  placeholder={isAdmin ? "Buscar por título o usuario..." : "Buscar por título..."}
-                />
-              </label>
-              <div className="flex flex-wrap gap-6 items-center pb-2">
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    id="filterPendingPropuestas"
-                    className="w-4 h-4 accent-emerald-600 cursor-pointer"
-                    checked={onlyPendingPropuestas}
-                    onChange={(e) => setOnlyPendingPropuestas(e.target.checked)}
-                  />
-                  <label htmlFor="filterPendingPropuestas" className="text-sm font-semibold text-slate-700 cursor-pointer select-none">
-                    Solo pendientes
-                  </label>
-                </div>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    id="filterPresentedPropuestas"
-                    className="w-4 h-4 accent-emerald-600 cursor-pointer"
-                    checked={onlyPresentedPropuestas}
-                    onChange={(e) => setOnlyPresentedPropuestas(e.target.checked)}
-                  />
-                  <label htmlFor="filterPresentedPropuestas" className="text-sm font-semibold text-slate-700 cursor-pointer select-none">
-                    Solo presentadas
-                  </label>
-                </div>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    id="filterFinalizedPropuestas"
-                    className="w-4 h-4 accent-emerald-600 cursor-pointer"
-                    checked={onlyFinalizedPropuestas}
-                    onChange={(e) => setOnlyFinalizedPropuestas(e.target.checked)}
-                  />
-                  <label htmlFor="filterFinalizedPropuestas" className="text-sm font-semibold text-slate-700 cursor-pointer select-none">
-                    Solo finalizadas
-                  </label>
-                </div>
-              </div>
+      <div className="mx-auto w-full max-w-7xl space-y-5 px-4 py-5 sm:px-6 lg:px-8">
+        <section className="panel">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <h1 className="text-3xl font-semibold tracking-normal text-slate-950 sm:text-4xl">
+                Calendario de sala comunitaria
+              </h1>
+              <p className="mt-2 text-sm text-slate-600">Reserva la sala para tu actividad.</p>
             </div>
-
-            <div className="grid gap-6 lg:grid-cols-[1fr_400px]">
-              <div className="space-y-4">
-                <h3 className="font-bold text-slate-800">
-                  {isAdmin ? "Todas las propuestas" : "Mis propuestas"}
-                </h3>
-                {loadingPropuestas ? <p className="empty">Cargando propuestas...</p> : null}
-                {!loadingPropuestas && filteredPropuestas.length === 0 ? <p className="empty">No hay propuestas que coincidan con los filtros.</p> : null}
-                {filteredPropuestas.map((p) => (
-                  <div key={p.id} className="bg-white border rounded-xl p-4 shadow-sm hover:border-emerald-200 transition">
-                    <div className="flex justify-between items-start mb-2">
-                      <span className={`text-[10px] px-2 py-0.5 rounded font-bold uppercase ${p.estado === 'FINALIZADA' ? 'bg-emerald-100 text-emerald-800' :
-                          p.estado === 'PRESENTADA' ? 'bg-blue-100 text-blue-800' :
-                            p.estado === 'RECHAZADA' ? 'bg-rose-100 text-rose-800' :
-                              p.estado === 'PENDIENTE' ? 'bg-amber-100 text-amber-800' :
-                                'bg-slate-100 text-slate-700'
-                        }`}>
-                        {translateText(p.estado)}
-                      </span>
-                      <span className="text-[10px] text-slate-400 font-medium">{new Date(p.fecha_creacion).toLocaleDateString()}</span>
-                    </div>
-                    <h4 className="font-bold text-slate-900 mb-1">{p.titulo}</h4>
-                    <p className="text-sm text-slate-600 line-clamp-2 mb-3">{p.descripcion}</p>
-                    {isAdmin && <p className="text-[10px] text-slate-500 mb-3">Vecino: <span className="font-bold">@{p.vecino_username}</span></p>}
-                    {(p.numero_registro || p.respuesta_admin) && (
-                      <div className="bg-slate-50 p-2 rounded text-xs border border-dashed mb-3">
-                        {p.numero_registro && <p><b>Registro:</b> {p.numero_registro} ({p.fecha_registro})</p>}
-                        {p.respuesta_admin && <p className="mt-1"><b>Respuesta:</b> {p.respuesta_admin}</p>}
-                      </div>
-                    )}
-                    <div className="flex gap-2">
-                      <button className="icon-action" onClick={() => startEditingPropuesta(p)}>{isAdmin ? "Gestionar" : "Ver / Editar"}</button>
-                      <button className="icon-action danger" onClick={() => handleDeletePropuesta(p.id)}>Borrar</button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="space-y-4">
-                <div className="panel bg-emerald-50/50 border-emerald-100 sticky top-5">
-                  <h3 className="font-bold text-slate-800 mb-4">{editingPropuestaId ? (isAdmin ? "Gestionar Propuesta" : "Editar Propuesta") : "Nueva Propuesta"}</h3>
-                  <form className="flex flex-col gap-3" onSubmit={handlePropuestaSubmit}>
-                    <label className="field"><span>Título corto</span><input required value={propuestaForm.titulo} onChange={e => setPropuestaForm({ ...propuestaForm, titulo: e.target.value })} placeholder="Ej: Arreglo de baches" disabled={saving} /></label>
-                    <label className="field"><span>Descripción</span><textarea required rows="4" className="w-full p-2 border rounded text-sm" value={propuestaForm.descripcion} onChange={e => setPropuestaForm({ ...propuestaForm, descripcion: e.target.value })} placeholder="Detalla aquí tu petición..." disabled={saving} /></label>
-                    {isAdmin && editingPropuestaId && (
-                      <div className="mt-4 pt-4 border-t border-emerald-200 space-y-3">
-                        <h4 className="text-xs font-bold text-emerald-800 uppercase">Gestión Administrativa</h4>
-                        <label className="field"><span>Estado</span>
-                          <select className="w-full p-2 border rounded text-sm bg-white" value={propuestaForm.estado} onChange={e => setPropuestaForm({ ...propuestaForm, estado: e.target.value })}>
-                            <option value="PENDIENTE">Pendiente</option>
-                            <option value="RECHAZADA">Rechazada</option>
-                            <option value="PRESENTADA">Presentada por Registro</option>
-                            <option value="FINALIZADA">Respondida / Finalizada</option>
-                          </select>
-                        </label>
-                        <div className="grid grid-cols-2 gap-2">
-                          <label className="field"><span>Nº Registro</span><input value={propuestaForm.numero_registro || ""} onChange={e => setPropuestaForm({ ...propuestaForm, numero_registro: e.target.value })} /></label>
-                          <label className="field"><span>Fecha Registro</span><input type="date" value={propuestaForm.fecha_registro || ""} onChange={e => setPropuestaForm({ ...propuestaForm, fecha_registro: e.target.value })} /></label>
-                        </div>
-                        <label className="field"><span>Respuesta Ayuntamiento</span><textarea rows="3" className="w-full p-2 border rounded text-sm" value={propuestaForm.respuesta_admin || ""} onChange={e => setPropuestaForm({ ...propuestaForm, respuesta_admin: e.target.value })} placeholder="Resumen de la respuesta..." /></label>
-                      </div>
-                    )}
-                    <div className="flex gap-2 pt-2">
-                      <button className="btn btn-primary flex-1" type="submit" disabled={saving}>{saving ? "Guardando..." : "Guardar Propuesta"}</button>
-                      {editingPropuestaId && <button className="btn btn-secondary" type="button" onClick={cancelEditingPropuesta}>Cancelar</button>}
-                    </div>
-                  </form>
-                </div>
-              </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button className="btn btn-secondary" type="button" onClick={selectToday}>Hoy</button>
+              <button className="btn btn-secondary icon-btn" type="button" onClick={() => changeMonth(-1)} aria-label="Mes anterior">‹</button>
+              <button className="btn btn-secondary icon-btn" type="button" onClick={() => changeMonth(1)} aria-label="Mes siguiente">›</button>
+              <button className="btn btn-primary" type="button" onClick={handleStartNewReservation} disabled={!auth}>
+                + Nueva reserva
+              </button>
             </div>
-          </section>
-        </div>
-      )}
+          </div>
+          <div className="mt-5 grid gap-3 sm:grid-cols-3">
+            <Metric label="Reservas totales" value={reservations.filter((r) => r.estado !== "RECHAZADA").length} />
+            <Metric label="Proximas aprobadas" value={upcomingReservations.length} />
+            <Metric label="Mis reservas" value={auth ? myReservations.length : "-"} />
+          </div>
+        </section>
 
-      {activeTab === "biblioteca" && (
-        <div className="mx-auto grid w-full max-w-7xl gap-5 px-4 py-5 sm:px-6 lg:grid-cols-[minmax(0,1fr)_390px] lg:px-8">
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_380px]">
           <section className="panel">
-            <div className="section-title">
+            <div className="calendar-head">
               <div>
-                <h2 className="text-xl font-semibold text-slate-950">Biblioteca feminista</h2>
-                <p className="mt-1 text-sm text-slate-600">Catalogo de libros y solicitudes de prestamo.</p>
+                <h2 className="text-xl font-semibold capitalize text-slate-950">{MONTH_FORMAT.format(viewDate)}</h2>
+                <p className="mt-1 text-sm text-slate-600">Selecciona un dia para ver su agenda y crear reservas.</p>
               </div>
-              <span className="text-sm font-bold text-emerald-700">{libros.filter((libro) => libro.activo).length} activos</span>
             </div>
-
-            <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_220px]">
-              <label className="field">
-                <span>Buscar</span>
-                <input value={libroSearch} onChange={(event) => setLibroSearch(event.target.value)} placeholder="Titulo, autora, categoria o ISBN" />
-              </label>
-              <label className="field">
-                <span>Disponibilidad</span>
-                <select className="w-full rounded border border-slate-300 bg-white p-2 text-sm" value={libroDisponibilidad} onChange={(event) => setLibroDisponibilidad(event.target.value)}>
-                  <option value="">Todas</option>
-                  <option value="DISPONIBLE">Disponibles</option>
-                  <option value="NO_DISPONIBLE">No disponibles</option>
-                </select>
-              </label>
-            </div>
-
-            <div className="mt-5 grid gap-3">
-              {loadingBiblioteca ? <p className="empty">Cargando biblioteca...</p> : null}
-              {!loadingBiblioteca && filteredLibros.length === 0 ? <p className="empty">No hay libros que coincidan con los filtros.</p> : null}
-              {filteredLibros.map((libro) => {
-                const socioActivo = auth?.profile?.es_socio && auth?.profile?.estado_socio === "ACEPTADA";
-                const puedeSolicitar = socioActivo && libro.activo && libro.disponibilidad === "DISPONIBLE";
+            <div className="calendar-grid mt-5">
+              {WEEKDAYS.map((day) => <div className="weekday" key={day}>{day}</div>)}
+              {calendarDays.map((day) => {
+                const key = dateKey(day);
+                const dayReservations = reservationsByDay[key] || [];
+                const isCurrentMonth = monthKey(day) === monthKey(viewDate);
+                const isSelected = key === selectedKey;
+                const isToday = key === dateKey(new Date());
                 return (
-                  <article key={libro.id} className="rounded-lg border border-slate-200 bg-white p-4">
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap gap-2">
-                          <span className={`rounded px-2 py-0.5 text-xs font-bold ${libro.activo && libro.disponibilidad === "DISPONIBLE" ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-700"}`}>
-                            {!libro.activo ? "Inactivo" : libro.disponibilidad === "DISPONIBLE" ? "Disponible" : "No disponible"}
-                          </span>
-                          {libro.categoria ? <span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600">{libro.categoria}</span> : null}
-                        </div>
-                        <h3 className="mt-2 text-lg font-bold text-slate-950">{libro.titulo}</h3>
-                        <p className="text-sm text-slate-600">{libro.autor || "Autoria no indicada"}</p>
-                        <p className="mt-1 text-xs text-slate-500">{[libro.editorial, libro.isbn ? `ISBN: ${libro.isbn}` : "ISBN no disponible", libro.etiqueta].filter(Boolean).join(" · ")}</p>
-                      </div>
-                      <div className="flex shrink-0 flex-wrap gap-2">
-                        <button className="btn btn-primary" type="button" onClick={() => handleSolicitarLibro(libro)} disabled={!puedeSolicitar || saving}>
-                          Solicitar prestamo
-                        </button>
-                        {isAdmin ? (
-                          <>
-                            <button className="btn btn-secondary" type="button" onClick={() => startEditingLibro(libro)}>Editar</button>
-                            <button className="icon-action danger" type="button" onClick={() => handleDeleteLibro(libro)} disabled={saving}>Eliminar</button>
-                          </>
-                        ) : null}
-                      </div>
-                    </div>
-                    {!auth ? <p className="mt-3 text-xs font-semibold text-slate-500">Inicia sesion para solicitar prestamos.</p> : null}
-                    {auth && !socioActivo ? <p className="mt-3 text-xs font-semibold text-amber-700">Solo los socios activos pueden solicitar prestamos.</p> : null}
-                  </article>
+                  <button
+                    className={`calendar-day ${isCurrentMonth ? "" : "muted"} ${isSelected ? "selected" : ""}`}
+                    key={key} type="button" onClick={() => handleSelectDate(day)}
+                  >
+                    <span className="day-number">
+                      {day.getDate()}
+                      {isToday ? <span className="today-dot" aria-label="Hoy" /> : null}
+                    </span>
+                    <span className="day-stack">
+                      {dayReservations.slice(0, 3).map((r) => {
+                        const est = r.estado || "PENDIENTE";
+                        let pillClass = "reservation-pill";
+                        let indicator = "";
+                        if (r.user_username === currentUser) pillClass += " reservation-pill-mine";
+                        if (est === "PENDIENTE") { indicator = " ⏳"; pillClass += " reservation-pill-pending"; }
+                        else if (est === "RECHAZADA") { indicator = " ✕"; pillClass += " reservation-pill-rejected"; }
+                        else if (est === "ACEPTADA") pillClass += " reservation-pill-accepted";
+                        return <span className={pillClass} key={r.id}>{TIME_FORMAT.format(new Date(r.start_time))} {r.title}{indicator}</span>;
+                      })}
+                      {dayReservations.length > 3 ? <span className="more-pill">+{dayReservations.length - 3} mas</span> : null}
+                    </span>
+                  </button>
                 );
               })}
             </div>
@@ -2125,846 +293,79 @@ export default function Home() {
 
           <aside className="flex flex-col gap-5">
             <section className="panel">
-              <h2 className="text-lg font-semibold text-slate-950">Mis prestamos</h2>
+              <div className="account">
+                <div>
+                  <p className="text-sm text-slate-600">Sesión activa {isAdmin && "👑"}</p>
+                  <h2 className="text-lg font-semibold text-slate-950">{auth.profile?.first_name || auth.profile?.username}</h2>
+                  <p className="text-sm text-slate-500">{auth.profile?.email || "Sin email registrado"}</p>
+                </div>
+              </div>
+            </section>
+
+            <section className="panel">
+              <div className="section-title">
+                <h2 className="text-lg font-semibold text-slate-950">Agenda del dia</h2>
+                <p className="text-sm capitalize text-slate-600">{DAY_FORMAT.format(selectedDate)}</p>
+              </div>
               <div className="mt-4 flex flex-col gap-3">
-                {!auth ? <p className="empty">Inicia sesion para ver tus solicitudes.</p> : null}
-                {auth && misPrestamosLibros.length === 0 ? <p className="empty">No tienes solicitudes ni prestamos.</p> : null}
-                {misPrestamosLibros.slice(0, 8).map((prestamo) => (
-                  <BookLoanItem key={prestamo.id} prestamo={prestamo} onFicha={setSelectedPrestamoFicha} />
+                {loading ? <p className="empty">Cargando reservas...</p> : null}
+                {!loading && todaysReservations.length === 0 ? <p className="empty">No hay reservas para este dia.</p> : null}
+                {todaysReservations.map((r) => (
+                  <ReservationItem key={r.id} currentUser={currentUser} isAdmin={isAdmin}
+                    reservation={r} saving={saving} onDelete={handleDelete}
+                    onEdit={startEditing} onUpdateStatus={handleUpdateStatus} />
                 ))}
               </div>
             </section>
 
-            {isAdmin ? (
-              <>
-                <section className="panel">
-                  <h2 className="text-lg font-semibold text-slate-950">{editingLibroId ? "Editar libro" : "Alta de libro"}</h2>
-                  <form className="mt-4 flex flex-col gap-3" onSubmit={handleLibroSubmit}>
-                    <label className="field"><span>Titulo</span><input required value={libroForm.titulo} onChange={(e) => setLibroForm({ ...libroForm, titulo: e.target.value })} /></label>
-                    <label className="field"><span>Autor/a</span><input value={libroForm.autor} onChange={(e) => setLibroForm({ ...libroForm, autor: e.target.value })} /></label>
-                    <label className="field"><span>Editorial</span><input value={libroForm.editorial} onChange={(e) => setLibroForm({ ...libroForm, editorial: e.target.value })} /></label>
-                    <label className="field"><span>Categoria</span><input value={libroForm.categoria} onChange={(e) => setLibroForm({ ...libroForm, categoria: e.target.value })} /></label>
-                    <label className="field"><span>ISBN</span><input value={libroForm.isbn} onChange={(e) => setLibroForm({ ...libroForm, isbn: e.target.value })} /></label>
-                    <label className="field"><span>Etiqueta</span><input value={libroForm.etiqueta} onChange={(e) => setLibroForm({ ...libroForm, etiqueta: e.target.value })} /></label>
-                    <label className="field">
-                      <span>Disponibilidad</span>
-                      <select className="w-full rounded border border-slate-300 bg-white p-2 text-sm" value={libroForm.disponibilidad} onChange={(e) => setLibroForm({ ...libroForm, disponibilidad: e.target.value })}>
-                        <option value="DISPONIBLE">Disponible</option>
-                        <option value="NO_DISPONIBLE">No disponible</option>
-                      </select>
-                    </label>
-                    <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-                      <input type="checkbox" checked={libroForm.activo} onChange={(e) => setLibroForm({ ...libroForm, activo: e.target.checked })} />
-                      Activo en catalogo
-                    </label>
-                    <div className="flex flex-wrap gap-2">
-                      <button className="btn btn-primary" type="submit" disabled={saving}>{editingLibroId ? "Actualizar" : "Crear libro"}</button>
-                      {editingLibroId ? <button className="btn btn-secondary" type="button" onClick={resetLibroForm}>Cancelar</button> : null}
-                    </div>
-                  </form>
-                </section>
-
-                <section className="panel">
-                  <h2 className="text-lg font-semibold text-slate-950">Control de prestamos</h2>
-                  <div className="mt-4 flex flex-col gap-3">
-                    {prestamosPendientesAdmin.length === 0 && prestamosActivosAdmin.length === 0 ? <p className="empty">No hay solicitudes pendientes ni prestamos activos.</p> : null}
-                    {[...prestamosPendientesAdmin, ...prestamosActivosAdmin].map((prestamo) => (
-                      <BookLoanItem
-                        key={prestamo.id}
-                        admin
-                        prestamo={prestamo}
-                        saving={saving}
-                        onFicha={setSelectedPrestamoFicha}
-                        onAprobar={() => handlePrestamoLibroAction(prestamo, "aprobar")}
-                        onPrestar={() => handlePrestamoLibroAction(prestamo, "prestar")}
-                        onRechazar={() => {
-                          const motivo = window.prompt("Motivo de rechazo (opcional)") || "";
-                          handlePrestamoLibroAction(prestamo, "rechazar", { motivo_rechazo: motivo });
-                        }}
-                        onDevolver={() => handlePrestamoLibroAction(prestamo, "devolver")}
-                      />
-                    ))}
+            <section className="panel" ref={reservationFormRef}>
+              <div className="section-title">
+                <h2 className="text-lg font-semibold text-slate-950">{editingId ? "Editar reserva" : "Crear reserva"}</h2>
+                <p className="text-sm text-slate-600">{auth ? "La solicitud se enviará a revisión." : "Inicia sesion para guardar cambios."}</p>
+              </div>
+              <form className="mt-4 flex flex-col gap-3" onSubmit={handleReservationSubmit}>
+                <label className="field">
+                  <span>Titulo</span>
+                  <input required disabled={!auth || saving} maxLength={100} value={form.title}
+                    onChange={(e) => setForm((c) => ({ ...c, title: e.target.value }))} placeholder="Reunion de vecinos" />
+                </label>
+                <label className="field">
+                  <span>Inicio</span>
+                  <input required disabled={!auth || saving} type="datetime-local" value={form.start_time}
+                    onChange={(e) => setForm((c) => ({
+                      ...c, start_time: e.target.value,
+                      end_time: c.end_time <= e.target.value ? addMinutes(e.target.value, 60) : c.end_time,
+                    }))} />
+                </label>
+                <label className="field">
+                  <span>Fin</span>
+                  <input required disabled={!auth || saving} type="datetime-local" value={form.end_time}
+                    onChange={(e) => setForm((c) => ({ ...c, end_time: e.target.value }))} />
+                </label>
+                {conflictingReservation ? (
+                  <div className="conflict-warning" role="alert">
+                    <strong>Tramo ocupado</strong>
+                    <span>{TIME_FORMAT.format(new Date(conflictingReservation.start_time))} - {TIME_FORMAT.format(new Date(conflictingReservation.end_time))} por {conflictingReservation.user_username || "otro usuario"}.</span>
                   </div>
-                </section>
-              </>
-            ) : null}
-          </aside>
-        </div>
-      )}
-
-      {activeTab === "compras" && (
-        <div className="mx-auto grid w-full max-w-7xl gap-5 px-4 py-5 sm:px-6 lg:grid-cols-[minmax(0,1fr)_380px] lg:px-8">
-          <section className="panel">
-            <div className="section-title">
-              <div>
-                <h2 className="text-xl font-semibold text-slate-950">Lista de la compra</h2>
-                <p className="mt-1 text-sm text-slate-600">
-                  {isAdmin ? "Gestiona los objetos pendientes de compra del centro." : "Consulta tus solicitudes y pide nuevos objetos para el centro."}
-                </p>
-              </div>
-              {isAdmin ? <span className="text-sm font-bold text-emerald-700">Pendiente: {CURRENCY_FORMAT.format(totalComprasPendientes)}</span> : null}
-            </div>
-
-            {isAdmin ? (
-              <div className="mt-5 grid gap-3 sm:grid-cols-3">
-                <Metric label="Solicitudes" value={comprasPendientesAdmin.length} />
-                <Metric label="Pendiente compra" value={CURRENCY_FORMAT.format(totalComprasPendientes)} />
-                <Metric label="Compradas" value={comprasCompradas.length} />
-              </div>
-            ) : null}
-
-            <div className="mt-5 grid gap-3 sm:grid-cols-[minmax(0,1fr)_220px]">
-              <label className="field">
-                <span>Buscar</span>
-                <input value={compraSearch} onChange={(event) => setCompraSearch(event.target.value)} placeholder={isAdmin ? "Objeto, descripcion o solicitante" : "Objeto o descripcion"} />
-              </label>
-              <div className="rounded-lg border border-emerald-100 bg-emerald-50 p-3 text-sm text-emerald-900">
-                <p className="font-bold">Estados</p>
-                <p className="mt-1">Solicitado, aprobado, rechazado o comprado.</p>
-              </div>
-            </div>
-
-            <div className="mt-5 flex flex-col gap-3">
-              {loadingCompras ? <p className="empty">Cargando lista de la compra...</p> : null}
-              {!loadingCompras && filteredCompras.length === 0 ? <p className="empty">No hay objetos que coincidan con la búsqueda.</p> : null}
-              {filteredCompras.map((compra) => (
-                <article key={compra.id} className="rounded-lg border border-slate-200 bg-white p-4">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <CompraStatusBadge estado={compra.estado} />
-                        <span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600">
-                          {CURRENCY_FORMAT.format(Number(compra.precio_aproximado || 0))}
-                        </span>
-                      </div>
-                      <h3 className="mt-2 text-lg font-bold text-slate-950">{compra.nombre}</h3>
-                      <p className="text-sm text-slate-600">Solicitado por <span className="font-semibold">@{compra.solicitante_username}</span></p>
-                      <p className="mt-1 text-xs text-slate-500">Fecha: {new Date(compra.fecha_solicitud).toLocaleDateString("es-ES")}</p>
-                      {compra.descripcion ? <p className="mt-2 text-sm text-slate-600">{compra.descripcion}</p> : null}
-                    </div>
-                    {isAdmin ? (
-                      <div className="flex shrink-0 flex-wrap gap-2">
-                        {compra.estado === "SOLICITADO" ? (
-                          <button className="icon-action" type="button" onClick={() => handleCompraAction(compra, "aprobar", `Compra "${compra.nombre}" aprobada.`)} disabled={saving}>
-                            Aprobar
-                          </button>
-                        ) : null}
-                        {["SOLICITADO", "APROBADO"].includes(compra.estado) ? (
-                          <button className="icon-action" type="button" onClick={() => handleCompraAction(compra, "comprado", `Compra "${compra.nombre}" marcada como comprada.`)} disabled={saving}>
-                            Comprado
-                          </button>
-                        ) : null}
-                        {["SOLICITADO", "APROBADO"].includes(compra.estado) ? (
-                          <button className="icon-action danger" type="button" onClick={() => handleCompraAction(compra, "rechazar", `Compra "${compra.nombre}" rechazada.`)} disabled={saving}>
-                            Rechazar
-                          </button>
-                        ) : null}
-                        <button className="icon-action danger" type="button" onClick={() => handleDeleteCompra(compra)} disabled={saving}>
-                          Eliminar
-                        </button>
-                      </div>
-                    ) : null}
-                  </div>
-                </article>
-              ))}
-            </div>
-          </section>
-
-          <aside className="flex flex-col gap-5">
-            <section className="panel">
-              <h2 className="text-lg font-semibold text-slate-950">{isAdmin ? "Añadir objeto" : "Solicitar objeto"}</h2>
-              <p className="mt-1 text-sm text-slate-600">
-                {isAdmin ? "Puedes crear objetos directamente y elegir su estado inicial." : "La solicitud quedará pendiente de revisión administrativa."}
-              </p>
-
-              {!isAdmin && !socioActivo ? (
-                <p className="empty mt-4">Solo los socios activos pueden solicitar objetos en esta sección.</p>
-              ) : (
-                <form className="mt-4 flex flex-col gap-3" onSubmit={handleCompraSubmit}>
-                  <label className="field">
-                    <span>Nombre</span>
-                    <input required value={compraForm.nombre} onChange={(event) => setCompraForm({ ...compraForm, nombre: event.target.value })} placeholder="Ej: Cafetera, papel, bombillas..." disabled={saving} />
-                  </label>
-                  <label className="field">
-                    <span>Precio aproximado</span>
-                    <input required type="number" min="0" step="0.01" value={compraForm.precio_aproximado} onChange={(event) => setCompraForm({ ...compraForm, precio_aproximado: event.target.value })} placeholder="0.00" disabled={saving} />
-                  </label>
-                  <label className="field">
-                    <span>Descripcion</span>
-                    <textarea rows="4" value={compraForm.descripcion} onChange={(event) => setCompraForm({ ...compraForm, descripcion: event.target.value })} placeholder="Detalles opcionales sobre el objeto..." disabled={saving} />
-                  </label>
-                  {isAdmin ? (
-                    <label className="field">
-                      <span>Estado inicial</span>
-                      <select value={compraForm.estado} onChange={(event) => setCompraForm({ ...compraForm, estado: event.target.value })} disabled={saving}>
-                        <option value="APROBADO">Aprobado</option>
-                        <option value="SOLICITADO">Solicitado</option>
-                        <option value="COMPRADO">Comprado</option>
-                        <option value="RECHAZADO">Rechazado</option>
-                      </select>
-                    </label>
-                  ) : null}
-                  <div className="flex flex-wrap gap-2">
-                    <button className="btn btn-primary" type="submit" disabled={saving}>
-                      {saving ? "Guardando..." : isAdmin ? "Añadir objeto" : "Enviar solicitud"}
+                ) : (
+                  <div className="availability-ok" role="status">Tramo disponible segun las reservas cargadas.</div>
+                )}
+                <div className="flex flex-wrap gap-2 pt-1">
+                  <button className="btn btn-primary" type="submit" disabled={!auth || saving || Boolean(conflictingReservation)}>
+                    {saving ? "Guardando..." : editingId ? "Actualizar" : "Enviar Solicitud"}
+                  </button>
+                  {editingId && (
+                    <button className="btn btn-secondary" type="button"
+                      onClick={() => { setEditingId(null); setForm(createDefaultForm(selectedDate)); }}>
+                      Cancelar
                     </button>
-                    <button className="btn btn-secondary" type="button" onClick={resetCompraForm} disabled={saving}>
-                      Limpiar
-                    </button>
-                  </div>
-                </form>
-              )}
+                  )}
+                </div>
+              </form>
             </section>
           </aside>
         </div>
-      )}
-
-      {/* ======================================================== */}
-      {/* VISTA 3: LIBRO DE SOCIOS / EXCEL (Exclusivo Administradores)*/}
-      {/* ======================================================== */}
-      {activeTab === "admin_socios" && (
-        <div className="mx-auto w-full max-w-7xl px-4 py-5 sm:px-6 space-y-8 lg:px-8">
-          {/* TABLA PRINCIPAL DE SOCIOS (GET) */}
-          <section className="panel">
-            <h2 className="text-xl font-bold text-slate-950 mb-1">Libro Registro de Socios digital</h2>
-            <p className="text-sm text-slate-600 mb-6">Listado completo de la base de datos de la asociación.</p>
-
-            <div className="mb-6 flex flex-col sm:flex-row sm:items-end gap-6">
-              <label className="field max-w-md">
-                <span>Buscar usuario</span>
-                <input
-                  value={socioSearch}
-                  onChange={(event) => setSocioSearch(event.target.value)}
-                  placeholder="Buscar por nombre, usuario, email, DNI, teléfono o nº de socio"
-                />
-              </label>
-              <div className="flex items-center gap-2 pb-2">
-                <input
-                  type="checkbox"
-                  id="filterActive"
-                  className="w-4 h-4 accent-emerald-600 cursor-pointer"
-                  checked={onlyActiveSocios}
-                  onChange={(e) => setOnlyActiveSocios(e.target.checked)}
-                />
-                <label htmlFor="filterActive" className="text-sm font-semibold text-slate-700 cursor-pointer select-none">
-                  Ver solo socios activos
-                </label>
-              </div>
-            </div>
-
-            {loadingSocios ? <p className="empty">Cargando base de datos de socios...</p> : null}
-            {!loadingSocios && filteredSocios.length === 0 ? <p className="empty">No hay usuarios que coincidan con la búsqueda.</p> : null}
-
-            {!loadingSocios && filteredSocios.length > 0 && (
-              <div className="overflow-x-auto overflow-y-auto max-h-[600px] rounded-lg border border-slate-200 shadow-inner bg-slate-50/30">
-                <table className="w-full border-collapse text-sm text-slate-900">
-                  <thead className="sticky top-0 z-10 bg-slate-100">
-                    <tr className="text-left border-b border-slate-200">
-                      <th className="p-3 font-semibold text-slate-700">Socio / Datos de acceso</th>
-                      <th className="p-3 font-semibold text-slate-700">DNI / NIF</th>
-                      <th className="p-3 font-semibold text-slate-700">Teléfono</th>
-                      <th className="p-3 font-semibold text-slate-700">Estado / Nº</th>
-                      <th className="p-3 font-semibold text-slate-700">Recibo</th>
-                      <th className="p-3 font-semibold text-slate-700">F. Pago</th>
-                      <th className="p-3 font-semibold text-slate-700 text-right">Acciones</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-200 bg-white">
-                    {filteredSocios.map((s) => (
-                      <tr key={s.id} className="hover:bg-slate-50/70 transition">
-                        <td className="p-3">
-                          <div className="font-bold text-slate-900">{s.last_name ? `${s.last_name}, ${s.first_name}` : s.username}</div>
-                          <div className="text-xs text-slate-500">@{s.username} • {s.email}</div>
-                        </td>
-                        <td className="p-3 text-slate-700 font-mono">{s.dni_nif || "—"}</td>
-                        <td className="p-3 text-slate-700">{s.telefono || "—"}</td>
-                        <td className="p-3">
-                          <div className="flex flex-col gap-1">
-                            <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold w-fit ${s.estado_socio === 'ACEPTADA' ? 'bg-emerald-100 text-emerald-800' :
-                                s.estado_socio === 'PENDIENTE' ? 'bg-amber-100 text-amber-800' :
-                                  s.estado_socio === 'BAJA_SOLICITADA' ? 'bg-rose-100 text-rose-800' :
-                                    'bg-slate-200 text-slate-700'
-                              }`}>
-                              {translateText(s.estado_socio)}
-                            </span>
-                            {s.es_socio && <span className="text-xs font-bold text-slate-600">Nº {s.numero_socio || "..."}</span>}
-                          </div>
-                        </td>
-                        <td className="p-3">
-                          {s.recibo_anual_pagado ? (
-                            <span className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full text-[10px] font-bold">PAGADO</span>
-                          ) : (
-                            <span className="bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full text-[10px] font-bold">PENDIENTE</span>
-                          )}
-                        </td>
-                        <td className="p-3 text-slate-600 text-xs font-medium">
-                          {s.fecha_pago_recibo || "—"}
-                        </td>
-                        <td className="p-3">
-                          <div className="flex flex-col items-end gap-1">
-                            {s.estado_socio === 'PENDIENTE' && (
-                              <button className="text-[10px] bg-emerald-600 text-white px-2 py-1 rounded hover:bg-emerald-700" onClick={async () => {
-                                await request(`/admin/users/${s.id}/`, { method: "PATCH", body: JSON.stringify({ estado_socio: 'ACEPTADA' }) });
-                                await loadSocios();
-                              }}>Aprobar Socio</button>
-                            )}
-                            {s.estado_socio === 'BAJA_SOLICITADA' && (
-                              <button className="text-[10px] bg-rose-600 text-white px-2 py-1 rounded hover:bg-rose-700" onClick={async () => {
-                                if (confirm("¿Tramitar baja definitiva?")) {
-                                  await request(`/admin/users/${s.id}/`, { method: "PATCH", body: JSON.stringify({ estado_socio: 'NO_SOCIO' }) });
-                                  await loadSocios();
-                                }
-                              }}>Tramitar Baja</button>
-                            )}
-                            <div className="flex gap-2">
-                              {s.estado_socio === 'ACEPTADA' && (
-                                <button className="icon-action danger" type="button" onClick={async () => {
-                                  if (confirm(`¿Dar de baja manualmente al socio @${s.username}?`)) {
-                                    await request(`/admin/users/${s.id}/`, { method: "PATCH", body: JSON.stringify({ estado_socio: 'NO_SOCIO' }) });
-                                    await loadSocios();
-                                    setStatus(`Baja tramitada para @${s.username}`);
-                                  }
-                                }} disabled={saving}>Baja</button>
-                              )}
-                              <button
-                                className="icon-action"
-                                type="button"
-                                onClick={() => startEditingSocio(s)}
-                                disabled={saving}
-                              >
-                                Editar
-                              </button>
-                              <button
-                                className="icon-action danger"
-                                type="button"
-                                onClick={() => handleDeleteSocio(s.id)}
-                                disabled={saving}
-                              >
-                                Borrar
-                              </button>
-                            </div>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </section>
-
-          {/* FORMULARIO DE PASO DE PAPEL A WEB (POST) */}
-          <section className="panel">
-            <div className="flex justify-between items-start mb-6">
-              <div>
-                <h2 className="text-xl font-bold text-slate-950">
-                  {editingSocioId ? "✏️ Editando Ficha de Usuario" : "➕ Registro Manual (Desde Papel)"}
-                </h2>
-                <p className="text-sm text-slate-600">
-                  {editingSocioId
-                    ? `Modificando datos de @${socioForm.username}`
-                    : "Vuelca aquí los datos de la hoja de inscripción física entregada por el vecino."}
-                </p>
-              </div>
-              {editingSocioId && (
-                <button className="btn btn-secondary" onClick={cancelEditingSocio}>Cancelar Edición</button>
-              )}
-            </div>
-
-            <form key={editingSocioId || 'new'} className="space-y-6" onSubmit={handleCreateSocioSubmit}>
-              <div className="grid gap-6 lg:grid-cols-3">
-                {/* Bloque: Datos de Acceso */}
-                <div className="space-y-3">
-                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Acceso y Sistema</h3>
-                  <label className="field"><span>Usuario</span><input name="username" defaultValue={socioForm.username} required placeholder="ej: javier92" /></label>
-                  <label className="field"><span>Email Oficial</span><input name="email" type="email" defaultValue={socioForm.email} required placeholder="vecino@correo.com" /></label>
-                  <label className="field"><span>Número Socio (Opcional)</span><input name="numero_socio" defaultValue={socioForm.numero_socio} placeholder="Automático si se deja vacío" /></label>
-                  <label className="field">
-                    <span>Estado del Socio</span>
-                    <select name="estado_socio" key={socioForm.estado_socio} defaultValue={socioForm.estado_socio} className="w-full p-2 border rounded bg-white text-sm">
-                      <option value="NO_SOCIO">No Socio / Baja</option>
-                      <option value="PENDIENTE">Solicitud Pendiente</option>
-                      <option value="ACEPTADA">Socio Activo</option>
-                      <option value="RECHAZADA">Solicitud Rechazada</option>
-                      <option value="BAJA_SOLICITADA">Baja Solicitada</option>
-                    </select>
-                  </label>
-                  <div className="flex items-center gap-2 pt-1 bg-rose-50 p-2 rounded border border-rose-100">
-                    <input type="checkbox" id="is_staff" name="is_staff" defaultChecked={socioForm.is_staff} className="accent-rose-600" />
-                    <label htmlFor="is_staff" className="text-[10px] font-bold text-rose-800 uppercase">Permisos de Administrador</label>
-                  </div>
-                </div>
-
-                {/* Bloque: Personales */}
-                <div className="lg:col-span-2 grid grid-cols-2 gap-3">
-                  <h3 className="col-span-2 text-xs font-bold text-slate-400 uppercase tracking-wider">📋 1. Datos Personales</h3>
-                  <label className="field"><span>Nombre</span><input name="first_name" defaultValue={socioForm.first_name} required /></label>
-                  <label className="field"><span>Apellidos</span><input name="last_name" defaultValue={socioForm.last_name} required /></label>
-                  <label className="field"><span>DNI / NIF</span><input name="dni_nif" defaultValue={socioForm.dni_nif} required /></label>
-                  <label className="field"><span>Fecha Nacimiento</span><input type="date" name="fecha_nacimiento" defaultValue={socioForm.fecha_nacimiento} /></label>
-                  <label className="field col-span-2"><span>Calle/Vía</span><input name="domicilio" defaultValue={socioForm.domicilio} /></label>
-                  <div className="grid grid-cols-3 gap-2 col-span-2">
-                    <label className="field"><span>Nº</span><input name="numero_casa" defaultValue={socioForm.numero_casa} /></label>
-                    <label className="field"><span>Piso</span><input name="piso" defaultValue={socioForm.piso} /></label>
-                    <label className="field"><span>Letra</span><input name="letra" defaultValue={socioForm.letra} /></label>
-                  </div>
-                  <label className="field"><span>Teléfono Principal</span><input name="telefono" defaultValue={socioForm.telefono} required /></label>
-                  <label className="field"><span>Teléfono 2</span><input name="telefono_movil_2" defaultValue={socioForm.telefono_movil_2} /></label>
-                </div>
-
-                {/* Bloque: Bancarios */}
-                <div className="lg:col-span-3 grid lg:grid-cols-2 gap-6 bg-slate-50 p-4 rounded-xl border border-slate-200">
-                  <div className="space-y-3">
-                    <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">💳 2. Datos Bancarios</h3>
-                    <label className="field"><span>Titular Cuenta</span><input name="titular_cuenta" defaultValue={socioForm.titular_cuenta} /></label>
-                    <label className="field"><span>IBAN Completo</span><input name="iban" defaultValue={socioForm.iban} placeholder="ES00 0000..." /></label>
-                  </div>
-                  <div className="space-y-3">
-                    <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Desglose tradicional</h3>
-                    <div className="grid grid-cols-4 gap-2">
-                      <label className="field"><span>Entidad</span><input name="banco_entidad" maxLength="4" defaultValue={socioForm.banco_entidad} /></label>
-                      <label className="field"><span>Sucursal</span><input name="banco_sucursal" maxLength="4" defaultValue={socioForm.banco_sucursal} /></label>
-                      <label className="field"><span>DC</span><input name="banco_dc" maxLength="2" defaultValue={socioForm.banco_dc} /></label>
-                      <label className="field"><span>Nº Cuenta</span><input name="banco_cuenta" maxLength="10" defaultValue={socioForm.banco_cuenta} /></label>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Bloque: Familiares */}
-                <div className="lg:col-span-2 space-y-3">
-                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">👥 3. Cuota Familiar</h3>
-                  <div className="overflow-x-auto border rounded-lg">
-                    <table className="w-full text-xs">
-                      <thead className="bg-slate-50 border-b">
-                        <tr className="text-left text-slate-500 uppercase text-[9px]">
-                          <th className="p-2">Nombre</th>
-                          <th className="p-2">Apellidos</th>
-                          <th className="p-2">NIF</th>
-                          <th className="p-2">Fecha Nac.</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y">
-                        {[1, 2, 3, 4, 5].map((idx) => {
-                          const fam = socioForm.familiares?.[idx - 1] || {};
-                          return (
-                            <tr key={idx}>
-                              <td className="p-1"><input name={`fam_nombre_${idx}`} defaultValue={fam.nombre} className="w-full p-1 border rounded" /></td>
-                              <td className="p-1"><input name={`fam_apellidos_${idx}`} defaultValue={fam.apellidos} className="w-full p-1 border rounded" /></td>
-                              <td className="p-1"><input name={`fam_nif_${idx}`} defaultValue={fam.nif} className="w-full p-1 border rounded" /></td>
-                              <td className="p-1"><input type="date" name={`fam_fnac_${idx}`} defaultValue={fam.fnac} className="w-full p-1 border rounded" /></td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-
-                {/* Bloque: Autorizaciones */}
-                <div className="space-y-4">
-                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">🔍 4. Otros y Firmas</h3>
-                  <div className="flex items-start gap-2">
-                    <input type="checkbox" id="es_socio_otras_asoc" name="es_socio_otras_asoc" defaultChecked={socioForm.es_socio_otras_asoc} />
-                    <label htmlFor="es_socio_otras_asoc" className="text-xs">Socio de otras asociaciones</label>
-                  </div>
-                  <label className="field"><span>¿Cuáles?</span><input name="cuales_otras_asoc" defaultValue={socioForm.cuales_otras_asoc} /></label>
-                  <div className="bg-emerald-50 p-3 rounded-lg border border-emerald-100 flex items-start gap-2">
-                    <input type="checkbox" id="recibo_anual_pagado" name="recibo_anual_pagado" defaultChecked={socioForm.recibo_anual_pagado} />
-                    <label htmlFor="recibo_anual_pagado" className="text-xs font-bold text-emerald-900">Recibo Anual Pagado</label>
-                  </div>
-                  <label className="field"><span>Fecha de pago del recibo</span><input type="date" name="fecha_pago_recibo" defaultValue={socioForm.fecha_pago_recibo} /></label>
-                  <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 flex items-start gap-2">
-                    <input type="checkbox" id="autoriza_imagenes" name="autoriza_imagenes" defaultChecked={socioForm.autoriza_imagenes} />
-                    <label htmlFor="autoriza_imagenes" className="text-[10px] text-emerald-800">
-                      <b>Autoriza publicación de imágenes:</b> El socio permite el uso de fotos en web/RRSS.
-                    </label>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex justify-end pt-4 border-t">
-                <button className="btn btn-primary px-10 py-2.5" type="submit" disabled={saving}>
-                  {saving ? "Procesando..." : editingSocioId ? "Actualizar Ficha de Socio" : "Guardar Socio en Base de Datos"}
-                </button>
-              </div>
-            </form>
-          </section>
-        </div>
-      )}
-
-      {/* ======================================================== */}
-      {/* MODAL DE REVISIÓN DETALLADA DE SOCIO */}
-      {/* ======================================================== */}
-      {viewingSocioDetails && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col animate-in fade-in zoom-in duration-200">
-            <header className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-              <div>
-                <h2 className="text-xl font-bold text-slate-900">Revisión de Solicitud: @{viewingSocioDetails.username}</h2>
-                <p className="text-xs text-slate-500 uppercase font-bold tracking-wider">Ficha de inscripción digitalizada</p>
-              </div>
-              <button onClick={() => setViewingSocioDetails(null)} className="text-slate-400 hover:text-slate-600 text-2xl px-2">×</button>
-            </header>
-
-            <div className="flex-1 overflow-y-auto p-6 space-y-8">
-              {/* Sección 1: Personales */}
-              <section>
-                <h3 className="text-sm font-bold text-emerald-700 mb-3 border-b border-emerald-100 pb-1">📋 1. Datos Personales</h3>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
-                  <div><p className="text-slate-500 text-[10px] uppercase font-bold">Nombre Completo</p><p className="font-medium">{viewingSocioDetails.first_name} {viewingSocioDetails.last_name}</p></div>
-                  <div><p className="text-slate-500 text-[10px] uppercase font-bold">DNI/NIF</p><p className="font-mono">{viewingSocioDetails.dni_nif}</p></div>
-                  <div><p className="text-slate-500 text-[10px] uppercase font-bold">Fecha Nacimiento</p><p>{viewingSocioDetails.fecha_nacimiento || "No indicada"}</p></div>
-                  <div className="col-span-2"><p className="text-slate-500 text-[10px] uppercase font-bold">Dirección</p><p>{viewingSocioDetails.domicilio} {viewingSocioDetails.numero_casa}, {viewingSocioDetails.piso} {viewingSocioDetails.letra}</p></div>
-                  <div><p className="text-slate-500 text-[10px] uppercase font-bold">Localidad</p><p>{viewingSocioDetails.codigo_postal} - {viewingSocioDetails.localidad}</p></div>
-                  <div><p className="text-slate-500 text-[10px] uppercase font-bold">Emails</p><p>{viewingSocioDetails.email}</p>{viewingSocioDetails.email_secundario && <p className="text-slate-400 text-xs">{viewingSocioDetails.email_secundario}</p>}</div>
-                  <div><p className="text-slate-500 text-[10px] uppercase font-bold">Teléfonos</p><p>{viewingSocioDetails.telefono}</p>{viewingSocioDetails.telefono_movil_2 && <p className="text-slate-400 text-xs">{viewingSocioDetails.telefono_movil_2}</p>}</div>
-                </div>
-              </section>
-
-              {/* Sección 2: Bancarios */}
-              <section className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-                <h3 className="text-sm font-bold text-slate-700 mb-3 border-b border-slate-200 pb-1">💳 2. Datos Bancarios y Recibo Anual</h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
-                  <div><p className="text-slate-500 text-[10px] uppercase font-bold">Titular de la Cuenta</p><p className="font-medium">{viewingSocioDetails.titular_cuenta} ({viewingSocioDetails.nif_titular})</p></div>
-                  <div><p className="text-slate-500 text-[10px] uppercase font-bold">Entidad Bancaria</p><p>{viewingSocioDetails.entidad_bancaria}</p></div>
-                  <div className="col-span-full"><p className="text-slate-500 text-[10px] uppercase font-bold">IBAN Internacional</p><p className="font-mono text-lg text-emerald-800 tracking-wider bg-white p-2 border rounded mt-1">{viewingSocioDetails.iban}</p></div>
-                  <div className="col-span-full flex gap-4 bg-white p-2 rounded border border-dashed text-center">
-                    <div className="flex-1 border-r"><p className="text-[9px] text-slate-400">Entidad</p><p className="font-mono">{viewingSocioDetails.banco_entidad}</p></div>
-                    <div className="flex-1 border-r"><p className="text-[9px] text-slate-400">Sucursal</p><p className="font-mono">{viewingSocioDetails.banco_sucursal}</p></div>
-                    <div className="flex-1 border-r"><p className="text-[9px] text-slate-400">DC</p><p className="font-mono">{viewingSocioDetails.banco_dc}</p></div>
-                    <div className="flex-2"><p className="text-[9px] text-slate-400">Nº Cuenta</p><p className="font-mono">{viewingSocioDetails.banco_cuenta}</p></div>
-                  </div>
-                </div>
-              </section>
-
-              {/* Sección 3: Familiares */}
-              <section>
-                <h3 className="text-sm font-bold text-slate-700 mb-3 border-b border-slate-200 pb-1">👥 3. Miembros Adicionales (Cuota Familiar)</h3>
-                {viewingSocioDetails.familiares?.length > 0 ? (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-xs text-left">
-                      <thead>
-                        <tr className="border-b text-slate-500">
-                          <th className="py-2">Nombre y Apellidos</th>
-                          <th className="py-2">DNI/NIF</th>
-                          <th className="py-2">F. Nacimiento</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {viewingSocioDetails.familiares.map((f, i) => (
-                          <tr key={i} className="border-b last:border-0 hover:bg-slate-50">
-                            <td className="py-2 font-medium">{f.nombre} {f.apellidos}</td>
-                            <td className="py-2 font-mono">{f.nif}</td>
-                            <td className="py-2">{f.fnac}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                ) : <p className="text-xs text-slate-400 italic">No se han registrado familiares adicionales en esta solicitud.</p>}
-              </section>
-
-              {/* Sección 4: Otros */}
-              <section className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                <div>
-                  <h3 className="text-sm font-bold text-slate-700 mb-2 border-b border-slate-200 pb-1">🔍 Otras Asociaciones</h3>
-                  <p className="text-sm">{viewingSocioDetails.es_socio_otras_asoc ? `Sí: ${viewingSocioDetails.cuales_otras_asoc}` : "No pertenece a otras asociaciones."}</p>
-                </div>
-                <div className="bg-emerald-50 p-3 rounded-lg border border-emerald-100">
-                  <h3 className="text-sm font-bold text-emerald-800 mb-1">📸 Autorización de Imágenes</h3>
-                  <p className="text-xs text-emerald-700 italic">
-                    {viewingSocioDetails.autoriza_imagenes
-                      ? "✅ El usuario AUTORIZA la publicación de imágenes de las actividades."
-                      : "❌ El usuario NO AUTORIZA la publicación de imágenes."}
-                  </p>
-                </div>
-              </section>
-            </div>
-
-            <footer className="p-6 border-t border-slate-100 bg-slate-50 flex flex-wrap gap-3 justify-end">
-              <button className="btn btn-secondary" onClick={() => setViewingSocioDetails(null)}>Cerrar Revisión</button>
-              <button className="bg-rose-600 text-white px-6 py-2 rounded-lg font-bold hover:bg-rose-700 transition" onClick={async () => {
-                if (confirm(`¿Rechazar solicitud de @${viewingSocioDetails.username}?`)) {
-                  await request(`/admin/users/${viewingSocioDetails.id}/`, { method: "PATCH", body: JSON.stringify({ estado_socio: 'RECHAZADA' }) });
-                  await loadSocios();
-                  setViewingSocioDetails(null);
-                }
-              }} disabled={saving}>
-                Rechazar Solicitud
-              </button>
-              <button className="bg-emerald-600 text-white px-8 py-2 rounded-lg font-bold hover:bg-emerald-700 shadow-lg shadow-emerald-200 transition" onClick={async () => {
-                await request(`/admin/users/${viewingSocioDetails.id}/`, { method: "PATCH", body: JSON.stringify({ estado_socio: 'ACEPTADA' }) });
-                await loadSocios();
-                setViewingSocioDetails(null);
-                setStatus(`Socio @${viewingSocioDetails.username} aprobado correctamente.`);
-              }} disabled={saving}>
-                Aprobar y Asignar Nº Socio
-              </button>
-            </footer>
-          </div>
-        </div>
-      )}
-
-      {selectedPrestamoFicha && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4">
-          <div className="loan-sheet max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-lg bg-white p-6 shadow-2xl">
-            <div className="mb-5 flex items-start justify-between gap-4">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-wider text-emerald-700">Asociacion Vecinal 3C</p>
-                <h2 className="text-2xl font-bold text-slate-950">Ficha de prestamo de libro</h2>
-              </div>
-              <div className="flex gap-2 print:hidden">
-                <button className="btn btn-secondary" type="button" onClick={() => window.print()}>Imprimir</button>
-                <button className="btn btn-secondary" type="button" onClick={() => setSelectedPrestamoFicha(null)}>Cerrar</button>
-              </div>
-            </div>
-            <div className="grid gap-3 text-sm sm:grid-cols-2">
-              <FichaField label="Lector" value={selectedPrestamoFicha.usuario_nombre} />
-              <FichaField label="Numero de socio" value={selectedPrestamoFicha.usuario_numero_socio || "No disponible"} />
-              <FichaField label="Telefono" value={selectedPrestamoFicha.usuario_telefono || "No disponible"} />
-              <FichaField label="Correo electronico" value={selectedPrestamoFicha.usuario_email || "No disponible"} />
-              <FichaField label="Fecha" value={formatDateOnly(selectedPrestamoFicha.fecha_aprobacion || selectedPrestamoFicha.fecha_solicitud)} />
-              <FichaField label="Fecha prevista de devolucion" value={selectedPrestamoFicha.fecha_prevista_devolucion || "Pendiente"} />
-              <FichaField label="Titulo" value={selectedPrestamoFicha.libro_titulo} wide />
-              <FichaField label="Estado" value={selectedPrestamoFicha.estado} />
-            </div>
-            <div className="mt-6 rounded-lg border border-slate-200 bg-slate-50 p-4">
-              <h3 className="font-bold text-slate-900">Condiciones</h3>
-              <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-slate-700">
-                <li>El prestamo de libros es de un plazo de 15 dias.</li>
-                <li>Los libros deben devolverse a la Asociacion Vecinal 3C.</li>
-                <li>El prestamo de libros esta reservado a socios de la Asociacion Vecinal 3C.</li>
-                <li>Esta ficha sirve para llevar control de los libros prestados.</li>
-              </ul>
-            </div>
-          </div>
-        </div>
-      )}
+      </div>
     </main>
-  );
-}
-
-function formatDateOnly(value) {
-  if (!value) return "Pendiente";
-  return new Intl.DateTimeFormat("es-ES", { day: "2-digit", month: "2-digit", year: "numeric" }).format(new Date(value));
-}
-
-function FichaField({ label, value, wide }) {
-  return (
-    <div className={`rounded border border-slate-200 p-3 ${wide ? "sm:col-span-2" : ""}`}>
-      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{label}</p>
-      <p className="mt-1 font-semibold text-slate-900">{value || "No disponible"}</p>
-    </div>
-  );
-}
-
-function BookLoanItem({ prestamo, admin, saving, onAprobar, onPrestar, onRechazar, onDevolver, onFicha }) {
-  const puedeFicha = ["APROBADA", "PRESTADA", "VENCIDA", "DEVUELTA"].includes(prestamo.estado);
-  const badgeClass = {
-    PENDIENTE: "bg-amber-100 text-amber-800",
-    APROBADA: "bg-blue-100 text-blue-800",
-    PRESTADA: "bg-emerald-100 text-emerald-800",
-    DEVUELTA: "bg-slate-100 text-slate-700",
-    RECHAZADA: "bg-rose-100 text-rose-800",
-    VENCIDA: "bg-red-100 text-red-800",
-  }[prestamo.estado] || "bg-slate-100 text-slate-700";
-
-  return (
-    <article className="rounded-lg border border-slate-200 bg-white p-3">
-      <span className={`rounded px-2 py-0.5 text-xs font-bold ${badgeClass}`}>{prestamo.estado}</span>
-      <h3 className="mt-2 font-bold text-slate-950">{prestamo.libro_titulo}</h3>
-      <p className="text-xs text-slate-600">{admin ? `Solicitado por @${prestamo.usuario_username}` : prestamo.libro_autor}</p>
-      <p className="mt-1 text-xs text-slate-500">Devolucion prevista: {prestamo.fecha_prevista_devolucion || "pendiente"}</p>
-      <div className="mt-3 flex flex-wrap gap-2">
-        {puedeFicha ? <button className="icon-action" type="button" onClick={() => onFicha(prestamo)}>Ficha</button> : null}
-        {admin && prestamo.estado === "PENDIENTE" ? <button className="icon-action" type="button" onClick={onAprobar} disabled={saving}>Aprobar</button> : null}
-        {admin && ["PENDIENTE", "APROBADA"].includes(prestamo.estado) ? <button className="icon-action" type="button" onClick={onPrestar} disabled={saving}>Entregado</button> : null}
-        {admin && ["PENDIENTE", "APROBADA"].includes(prestamo.estado) ? <button className="icon-action danger" type="button" onClick={onRechazar} disabled={saving}>Rechazar</button> : null}
-        {admin && ["APROBADA", "PRESTADA", "VENCIDA"].includes(prestamo.estado) ? <button className="icon-action" type="button" onClick={onDevolver} disabled={saving}>Devuelto</button> : null}
-      </div>
-    </article>
-  );
-}
-
-function CompraStatusBadge({ estado }) {
-  const badgeClass = {
-    SOLICITADO: "bg-amber-100 text-amber-800",
-    APROBADO: "bg-blue-100 text-blue-800",
-    RECHAZADO: "bg-rose-100 text-rose-800",
-    COMPRADO: "bg-emerald-100 text-emerald-800",
-  }[estado] || "bg-slate-100 text-slate-700";
-
-  return (
-    <span className={`rounded px-2 py-0.5 text-xs font-bold ${badgeClass}`}>
-      {translateText(estado)}
-    </span>
-  );
-}
-
-function Metric({ label, value }) {
-  return (
-    <div className="metric">
-      <span>{label}</span>
-      <strong>{value}</strong>
-    </div>
-  );
-}
-
-function AuthForm({ authForm, authMode, saving, setAuthForm, setAuthMode, onSubmit }) {
-  const isRegister = authMode === "register";
-
-  return (
-    <div>
-      <div className="segmented" role="tablist" aria-label="Autenticacion">
-        <button className={authMode === "login" ? "active" : ""} type="button" onClick={() => setAuthMode("login")}>
-          Acceder
-        </button>
-        <button className={isRegister ? "active" : ""} type="button" onClick={() => setAuthMode("register")}>
-          Registro
-        </button>
-      </div>
-
-      <form className="mt-4 flex flex-col gap-3" onSubmit={onSubmit}>
-        <label className="field">
-          <span>Usuario</span>
-          <input
-            autoComplete="username"
-            required
-            value={authForm.username}
-            onChange={(event) => setAuthForm((current) => ({ ...current, username: event.target.value }))}
-          />
-        </label>
-        {isRegister ? (
-          <>
-            <label className="field">
-              <span>Email</span>
-              <input
-                autoComplete="email"
-                type="email"
-                required
-                value={authForm.email}
-                onChange={(event) => setAuthForm((current) => ({ ...current, email: event.target.value }))}
-              />
-            </label>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
-              <label className="field">
-                <span>Nombre</span>
-                <input value={authForm.first_name} onChange={(event) => setAuthForm((current) => ({ ...current, first_name: event.target.value }))} />
-              </label>
-              <label className="field">
-                <span>Apellidos</span>
-                <input value={authForm.last_name} onChange={(event) => setAuthForm((current) => ({ ...current, last_name: event.target.value }))} />
-              </label>
-            </div>
-          </>
-        ) : null}
-        <label className="field">
-          <span>Contrasena</span>
-          <input
-            autoComplete={isRegister ? "new-password" : "current-password"}
-            required
-            type="password"
-            value={authForm.password}
-            onChange={(event) => setAuthForm((current) => ({ ...current, password: event.target.value }))}
-          />
-        </label>
-        {isRegister ? (
-          <label className="field">
-            <span>Repetir contrasena</span>
-            <input
-              autoComplete="new-password"
-              required
-              type="password"
-              value={authForm.password_two}
-              onChange={(event) => setAuthForm((current) => ({ ...current, password_two: event.target.value }))}
-            />
-          </label>
-        ) : null}
-        <button className="btn btn-primary" type="submit" disabled={saving}>
-          {saving ? "Procesando..." : isRegister ? "Crear cuenta" : "Entrar"}
-        </button>
-      </form>
-    </div>
-  );
-}
-
-function ReservationItem({ currentUser, reservation, saving, onDelete, onEdit, isAdmin, onUpdateStatus }) {
-  const start = new Date(reservation.start_time);
-  const end = new Date(reservation.end_time);
-  const isMine = currentUser && reservation.user_username === currentUser;
-  const est = reservation.estado || "PENDIENTE";
-
-  return (
-    <article
-      className={`reservation-item ${isMine ? "mine" : ""} ${est === "PENDIENTE"
-          ? "reservation-item-pending"
-          : est === "RECHAZADA"
-            ? "reservation-item-rejected"
-            : "reservation-item-accepted"
-        }`}
-    >
-      <div className="reservation-time">
-        <strong>{TIME_FORMAT.format(start)}</strong>
-        <span>{TIME_FORMAT.format(end)}</span>
-      </div>
-      <div className="min-w-0 flex-1">
-        <h3 className={est === "RECHAZADA" ? "line-through opacity-50" : ""}>{reservation.title}</h3>
-        <p className="flex items-center gap-1.5 text-xs text-slate-600">
-          <span>{reservation.user_username || "Usuario"}</span>
-          {est === "PENDIENTE" && <span className="bg-amber-100 text-amber-800 text-[10px] px-1.5 py-0.2 rounded font-medium">Pendiente</span>}
-          {est === "RECHAZADA" && <span className="bg-rose-100 text-rose-800 text-[10px] px-1.5 py-0.2 rounded font-medium">Rechazada</span>}
-          {est === "ACEPTADA" && <span className="bg-emerald-100 text-emerald-800 text-[10px] px-1.5 py-0.2 rounded font-medium">Aceptada</span>}
-        </p>
-      </div>
-      <div className="reservation-actions flex flex-col gap-1 items-end">
-        {/* Los usuarios pueden editar/borrar solo si están en estado PENDIENTE */}
-        {isMine && est === "PENDIENTE" ? (
-          <div className="flex gap-2">
-            <button className="icon-action" type="button" onClick={() => onEdit(reservation)} disabled={saving} aria-label="Editar reserva">
-              Editar
-            </button>
-            <button className="icon-action danger" type="button" onClick={() => onDelete(reservation.id)} disabled={saving} aria-label="Eliminar reserva">
-              Borrar
-            </button>
-          </div>
-        ) : isMine ? (
-          <button className="icon-action danger" type="button" onClick={() => onDelete(reservation.id)} disabled={saving} aria-label="Eliminar reserva">
-            Eliminar
-          </button>
-        ) : null}
-
-        {/* 👑 Acciones directas si el que mira la agenda es Admin */}
-        {isAdmin && (
-          <div className="flex flex-col gap-1 mt-1 items-end">
-            {/* Si está pendiente, muestra botones de Aprobar/Rechazar */}
-            {est === "PENDIENTE" && (
-              <div className="flex gap-1.5 mb-1">
-                <button className="text-[11px] bg-emerald-600 text-white px-2 py-0.5 rounded hover:bg-emerald-700 transition" onClick={() => onUpdateStatus(reservation.id, "ACEPTADA")} disabled={saving} title="Aprobar de inmediato">
-                  Aprobar
-                </button>
-                <button className="text-[11px] bg-rose-600 text-white px-2 py-0.5 rounded hover:bg-rose-700 transition" onClick={() => onUpdateStatus(reservation.id, "RECHAZADA")} disabled={saving} title="Rechazar solicitud">
-                  Rechazar
-                </button>
-              </div>
-            )}
-
-            {/* 🔥 BOTÓN ROJO DE ADMIN: Usa la clase "icon-action danger" para ser idéntico al de arriba */}
-            <button
-              className="icon-action danger"
-              type="button"
-              onClick={() => {
-                if (confirm("¿Estás seguro de que deseas eliminar esta reserva definitivamente del sistema?")) {
-                  onDelete(reservation.id);
-                }
-              }}
-              disabled={saving}
-              title="Borrar reserva como Administrador"
-            >
-              Borrar
-            </button>
-          </div>
-        )}
-      </div>
-    </article>
   );
 }
