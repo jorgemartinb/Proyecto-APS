@@ -3,6 +3,15 @@ from rest_framework import serializers
 
 Usuario = get_user_model()
 
+PASSWORD_RULE_MESSAGE = "La contraseña debe tener mínimo 8 caracteres e incluir letras y números."
+
+
+def validate_password_strength(password):
+    if len(password) < 8 or not any(char.isalpha() for char in password) or not any(char.isdigit() for char in password):
+        raise serializers.ValidationError(PASSWORD_RULE_MESSAGE)
+    return password
+
+
 class UserSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True)
     password_two = serializers.CharField(write_only=True)
@@ -17,6 +26,7 @@ class UserSerializer(serializers.ModelSerializer):
     def validate(self, data):
         if data['password'] != data['password_two']:
             raise serializers.ValidationError({"password_two": "Las contraseñas no coinciden."})
+        validate_password_strength(data['password'])
         return data
 
 
@@ -61,9 +71,21 @@ class UserPasswordChangeSerializer(serializers.Serializer):
     def validate(self, data):
         if data['new_password'] != data['new_password_two']:
             raise serializers.ValidationError({"new_password_two": "La nueva contraseña no coincide."})
+        validate_password_strength(data['new_password'])
         request = self.context.get('request')
         if request and not request.user.check_password(data['old_password']):
             raise serializers.ValidationError({"old_password": "La contraseña actual es incorrecta."})
+        return data
+
+
+class AdminUserPasswordChangeSerializer(serializers.Serializer):
+    new_password = serializers.CharField(write_only=True)
+    new_password_two = serializers.CharField(write_only=True)
+
+    def validate(self, data):
+        if data['new_password'] != data['new_password_two']:
+            raise serializers.ValidationError({"new_password_two": "La nueva contraseña no coincide."})
+        validate_password_strength(data['new_password'])
         return data
     
 class LogoutSerializer(serializers.Serializer):

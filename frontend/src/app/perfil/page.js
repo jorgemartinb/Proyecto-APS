@@ -4,13 +4,18 @@ import { useState } from "react";
 import { redirect } from "next/navigation";
 import { useAuth } from "../context/AuthContext";
 import Alert from "../components/Alert";
-import { translateText, normalizeError } from "../lib/utils";
+import { translateText, normalizeError, isStrongPassword, PASSWORD_RULE_TEXT } from "../lib/utils";
 
 export default function PerfilPage() {
   const { auth, updateAuth, request, loadProfile } = useAuth();
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [passwordForm, setPasswordForm] = useState({
+    old_password: "",
+    new_password: "",
+    new_password_two: "",
+  });
 
   if (!auth) {
     redirect("/");
@@ -24,6 +29,26 @@ export default function PerfilPage() {
       setStatus("Solicitud de baja enviada. El administrador la procesará pronto.");
       const refreshed = await loadProfile(auth);
       updateAuth(refreshed);
+    } catch (err) {
+      setError(normalizeError(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handlePasswordChange(e) {
+    e.preventDefault();
+    setSaving(true);
+    setError("");
+    setStatus("");
+    try {
+      if (!isStrongPassword(passwordForm.new_password)) {
+        setError(PASSWORD_RULE_TEXT);
+        return;
+      }
+      await request("/user/password-change/", { method: "PUT", body: JSON.stringify(passwordForm) });
+      setPasswordForm({ old_password: "", new_password: "", new_password_two: "" });
+      setStatus("Contraseña actualizada correctamente.");
     } catch (err) {
       setError(normalizeError(err));
     } finally {
@@ -92,6 +117,52 @@ export default function PerfilPage() {
                 </button>
               )}
             </div>
+          </section>
+
+          <section className="panel">
+            <h2 className="text-xl font-bold text-slate-950 mb-4">Seguridad</h2>
+            <form className="flex flex-col gap-3" onSubmit={handlePasswordChange}>
+              <label className="field">
+                <span>Contraseña actual</span>
+                <input
+                  autoComplete="current-password"
+                  required
+                  type="password"
+                  value={passwordForm.old_password}
+                  onChange={(e) => setPasswordForm((current) => ({ ...current, old_password: e.target.value }))}
+                />
+              </label>
+              <label className="field">
+                <span>Nueva contraseña</span>
+                <input
+                  autoComplete="new-password"
+                  minLength={8}
+                  pattern="(?=.*[A-Za-zÁÉÍÓÚÜÑáéíóúüñ])(?=.*\d).{8,}"
+                  required
+                  title={PASSWORD_RULE_TEXT}
+                  type="password"
+                  value={passwordForm.new_password}
+                  onChange={(e) => setPasswordForm((current) => ({ ...current, new_password: e.target.value }))}
+                />
+              </label>
+              <label className="field">
+                <span>Repetir nueva contraseña</span>
+                <input
+                  autoComplete="new-password"
+                  minLength={8}
+                  pattern="(?=.*[A-Za-zÁÉÍÓÚÜÑáéíóúüñ])(?=.*\d).{8,}"
+                  required
+                  title={PASSWORD_RULE_TEXT}
+                  type="password"
+                  value={passwordForm.new_password_two}
+                  onChange={(e) => setPasswordForm((current) => ({ ...current, new_password_two: e.target.value }))}
+                />
+              </label>
+              <p className="text-xs font-semibold text-slate-500">{PASSWORD_RULE_TEXT}</p>
+              <button className="btn btn-primary" type="submit" disabled={saving}>
+                {saving ? "Guardando..." : "Actualizar contraseña"}
+              </button>
+            </form>
           </section>
         </div>
 

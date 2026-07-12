@@ -1,5 +1,7 @@
 "use client";
 
+import { PASSWORD_RULE_TEXT } from "../lib/utils";
+
 export default function AuthForm({ authForm, authMode, saving, setAuthForm, setAuthMode, onSubmit }) {
   const isRegister = authMode === "register";
   return (
@@ -39,16 +41,22 @@ export default function AuthForm({ authForm, authMode, saving, setAuthForm, setA
         )}
         <label className="field">
           <span>Contraseña</span>
-          <input autoComplete={isRegister ? "new-password" : "current-password"} required type="password"
+          <input autoComplete={isRegister ? "new-password" : "current-password"}
+            minLength={isRegister ? 8 : undefined}
+            pattern={isRegister ? "(?=.*[A-Za-zÁÉÍÓÚÜÑáéíóúüñ])(?=.*\\d).{8,}" : undefined}
+            required title={isRegister ? PASSWORD_RULE_TEXT : undefined} type="password"
             value={authForm.password} onChange={(e) => setAuthForm((c) => ({ ...c, password: e.target.value }))} />
         </label>
         {isRegister && (
           <label className="field">
             <span>Repetir contraseña</span>
-            <input autoComplete="new-password" required type="password"
+            <input autoComplete="new-password" minLength={8}
+              pattern="(?=.*[A-Za-zÁÉÍÓÚÜÑáéíóúüñ])(?=.*\d).{8,}"
+              required title={PASSWORD_RULE_TEXT} type="password"
               value={authForm.password_two} onChange={(e) => setAuthForm((c) => ({ ...c, password_two: e.target.value }))} />
           </label>
         )}
+        {isRegister ? <p className="text-xs font-semibold text-slate-500">{PASSWORD_RULE_TEXT}</p> : null}
         <button className="btn btn-primary" type="submit" disabled={saving}>
           {saving ? "Procesando..." : isRegister ? "Crear cuenta" : "Entrar"}
         </button>

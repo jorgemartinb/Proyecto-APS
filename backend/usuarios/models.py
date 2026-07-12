@@ -28,7 +28,7 @@ class Usuario(AbstractUser):
     is_alta = models.BooleanField(default=True, verbose_name="¿Está de Alta?")
     recibo_anual_pagado = models.BooleanField(default=False, verbose_name="Recibo Anual Pagado")
     fecha_pago_recibo = models.DateField(blank=True, null=True, verbose_name="Fecha de Pago del Recibo")
-    fecha_alta = models.DateField(default=timezone.now, verbose_name="Fecha de Alta")
+    fecha_alta = models.DateField(default=timezone.localdate, verbose_name="Fecha de Alta")
     fecha_baja = models.DateField(blank=True, null=True, verbose_name="Fecha de Baja")
 
     # --- 🆕 Nuevos Datos Personales y de Contacto (Extraídos del Excel) ---

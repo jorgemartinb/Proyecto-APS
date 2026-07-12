@@ -5,6 +5,10 @@ import { useAuth } from "../context/AuthContext";
 import Alert from "../components/Alert";
 import { translateText, normalizeError } from "../lib/utils";
 
+function getPedidoPropuesta(propuesta) {
+  return propuesta.numero_pedido || (propuesta.id ? `PL-${String(propuesta.id).padStart(6, "0")}` : "Pendiente");
+}
+
 export default function PlenosPage() {
   const { auth, request, isAdmin } = useAuth();
   const [propuestas, setPropuestas] = useState([]);
@@ -32,6 +36,7 @@ export default function PlenosPage() {
     }
   }, [auth, request]);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { void loadPropuestas(); }, [loadPropuestas]);
 
   const filteredPropuestas = useMemo(() => {
@@ -67,8 +72,8 @@ export default function PlenosPage() {
     try {
       const path = editingPropuestaId ? `/propuestas/${editingPropuestaId}/` : "/propuestas/";
       const payload = { ...propuestaForm, fecha_registro: propuestaForm.fecha_registro === "" ? null : propuestaForm.fecha_registro };
-      await request(path, { method: editingPropuestaId ? "PUT" : "POST", body: JSON.stringify(payload) });
-      setStatus(editingPropuestaId ? "Propuesta actualizada." : "Propuesta enviada correctamente.");
+      const savedPropuesta = await request(path, { method: editingPropuestaId ? "PUT" : "POST", body: JSON.stringify(payload) });
+      setStatus(editingPropuestaId ? "Propuesta actualizada." : `Propuesta enviada correctamente. Nº de pedido: ${getPedidoPropuesta(savedPropuesta)}`);
       cancelEditingPropuesta();
       await loadPropuestas();
     } catch (err) {
@@ -147,6 +152,7 @@ export default function PlenosPage() {
                       <span className="text-[10px] text-slate-400 font-medium">{new Date(p.fecha_creacion).toLocaleDateString()}</span>
                     </div>
                     <h4 className="font-bold text-slate-900 mb-1">{p.titulo}</h4>
+                    <p className="mb-2 text-xs font-bold text-emerald-700">Nº pedido: {getPedidoPropuesta(p)}</p>
                     <p className="text-sm text-slate-600 line-clamp-2 mb-3">{p.descripcion}</p>
                     {isAdmin && <p className="text-[10px] text-slate-500 mb-3">Vecino: <span className="font-bold">@{p.vecino_username}</span></p>}
                     {(p.numero_registro || p.respuesta_admin) && (
@@ -170,7 +176,7 @@ export default function PlenosPage() {
                     <label className="field"><span>Título corto</span>
                       <input required value={propuestaForm.titulo} onChange={(e) => setPropuestaForm({ ...propuestaForm, titulo: e.target.value })} placeholder="Ej: Arreglo de baches" disabled={saving} /></label>
                     <label className="field"><span>Descripción</span>
-                      <textarea required rows="4" className="w-full p-2 border rounded text-sm" value={propuestaForm.descripcion} onChange={(e) => setPropuestaForm({ ...propuestaForm, descripcion: e.target.value })} placeholder="Detalla aquí tu petición..." disabled={saving} /></label>
+                      <textarea required rows="4" className="w-full p-2 border rounded text-sm" value={propuestaForm.descripcion} onChange={(e) => setPropuestaForm({ ...propuestaForm, descripcion: e.target.value })} placeholder="Detalla aquí tu petición. Si es una actividad presencial o una actuación en un lugar concreto, incluye la dirección completa." disabled={saving} /></label>
                     {isAdmin && editingPropuestaId && (
                       <div className="mt-4 pt-4 border-t border-emerald-200 space-y-3">
                         <h4 className="text-xs font-bold text-emerald-800 uppercase">Gestión Administrativa</h4>

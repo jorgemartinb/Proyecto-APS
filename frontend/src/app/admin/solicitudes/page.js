@@ -6,6 +6,10 @@ import { useAuth } from "../../context/AuthContext";
 import Alert from "../../components/Alert";
 import { DAY_FORMAT, TIME_FORMAT, CURRENCY_FORMAT, normalizeError } from "../../lib/utils";
 
+function getPedidoPropuesta(propuesta) {
+  return propuesta.numero_pedido || (propuesta.id ? `PL-${String(propuesta.id).padStart(6, "0")}` : "Pendiente");
+}
+
 export default function SolicitudesPage() {
   const { auth, request, isAdmin } = useAuth();
   const [reservations, setReservations] = useState([]);
@@ -42,6 +46,7 @@ export default function SolicitudesPage() {
     }
   }, [request]);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { void loadAll(); }, [loadAll]);
 
   const reservasPendientes = useMemo(() => reservations.filter((r) => r.estado === "PENDIENTE"), [reservations]);
@@ -210,6 +215,7 @@ export default function SolicitudesPage() {
                   <div>
                     <span className="bg-amber-100 text-amber-800 text-xs px-2 py-0.5 rounded font-semibold uppercase">Propuesta Pendiente</span>
                     <h3 className="font-bold text-slate-900 text-lg mt-1">{p.titulo}</h3>
+                    <p className="text-xs font-bold text-emerald-700 mt-1">Nº pedido: {getPedidoPropuesta(p)}</p>
                     <p className="text-sm text-slate-600">Enviada por: <span className="font-semibold">@{p.vecino_username}</span></p>
                     <p className="text-sm text-slate-500 mt-2 italic line-clamp-1">&quot;{p.descripcion}&quot;</p>
                   </div>

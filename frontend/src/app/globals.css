@@ -97,6 +97,16 @@ textarea:disabled {
   background: #f8fafc;
 }
 
+.btn-danger {
+  border-color: #991b1b;
+  background: #dc2626;
+  color: #ffffff;
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: #b91c1c;
+}
+
 .icon-btn {
   width: 42px;
   padding: 0;
@@ -388,6 +398,17 @@ textarea:disabled {
 .icon-action.danger {
   border-color: #fecaca;
   color: #b91c1c;
+}
+
+.icon-action.strong-danger {
+  border-color: #b91c1c;
+  background: #dc2626;
+  color: #ffffff;
+  box-shadow: 0 8px 18px rgba(220, 38, 38, 0.18);
+}
+
+.icon-action.strong-danger:hover:not(:disabled) {
+  background: #b91c1c;
 }
 
 .app-alert {

@@ -30,6 +30,7 @@ export default function ComprasPage() {
     }
   }, [auth, request]);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { void loadCompras(); }, [loadCompras]);
 
   const filteredCompras = useMemo(() => {

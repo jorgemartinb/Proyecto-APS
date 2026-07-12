@@ -3,12 +3,18 @@ from .models import PropuestaPleno
 
 class PropuestaPlenoSerializer(serializers.ModelSerializer):
     vecino_username = serializers.ReadOnlyField(source='vecino.username')
+    numero_pedido = serializers.SerializerMethodField()
+
+    def get_numero_pedido(self, obj):
+        if not obj.id:
+            return None
+        return f"PL-{obj.id:06d}"
     
     class Meta:
         model = PropuestaPleno
         fields = [
-            'id', 'vecino', 'vecino_username', 'titulo', 'descripcion', 
+            'id', 'numero_pedido', 'vecino', 'vecino_username', 'titulo', 'descripcion',
             'estado', 'fecha_creacion', 'fecha_registro', 
             'numero_registro', 'respuesta_admin'
         ]
-        read_only_fields = ['vecino', 'fecha_creacion']
+        read_only_fields = ['vecino', 'fecha_creacion', 'numero_pedido']

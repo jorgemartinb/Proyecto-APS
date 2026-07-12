@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { redirect } from "next/navigation";
 import { useAuth } from "../../context/AuthContext";
 import Alert from "../../components/Alert";
-import { translateText, normalizeError } from "../../lib/utils";
+import { translateText, normalizeError, isStrongPassword, PASSWORD_RULE_TEXT } from "../../lib/utils";
 
 const SOCIO_FORM_INITIAL = {
   username: "", email: "", first_name: "", last_name: "", dni_nif: "", telefono: "",
@@ -28,6 +28,12 @@ export default function SociosPage() {
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [adminPasswordForm, setAdminPasswordForm] = useState({
+    userId: null,
+    username: "",
+    new_password: "",
+    new_password_two: "",
+  });
 
   if (!auth || !isAdmin) redirect("/");
 
@@ -43,6 +49,7 @@ export default function SociosPage() {
     }
   }, [request]);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { void loadSocios(); }, [loadSocios]);
 
   const filteredSocios = useMemo(() => {
@@ -61,6 +68,56 @@ export default function SociosPage() {
   function cancelEditingSocio() {
     setEditingSocioId(null);
     setSocioForm(SOCIO_FORM_INITIAL);
+  }
+
+  function startAdminPasswordChange(socio) {
+    if (socio.id === auth.profile?.id) {
+      setError("Para cambiar tu propia contraseña, usa la sección Seguridad de Mi Perfil.");
+      return;
+    }
+    setAdminPasswordForm({
+      userId: socio.id,
+      username: socio.username,
+      new_password: "",
+      new_password_two: "",
+    });
+  }
+
+  function cancelAdminPasswordChange() {
+    setAdminPasswordForm({
+      userId: null,
+      username: "",
+      new_password: "",
+      new_password_two: "",
+    });
+  }
+
+  async function handleAdminPasswordChange(event) {
+    event.preventDefault();
+    if (!adminPasswordForm.userId) return;
+
+    setSaving(true);
+    setError("");
+    setStatus("");
+    try {
+      if (!isStrongPassword(adminPasswordForm.new_password)) {
+        setError(PASSWORD_RULE_TEXT);
+        return;
+      }
+      await request(`/admin/users/${adminPasswordForm.userId}/password/`, {
+        method: "PUT",
+        body: JSON.stringify({
+          new_password: adminPasswordForm.new_password,
+          new_password_two: adminPasswordForm.new_password_two,
+        }),
+      });
+      setStatus(`Contraseña actualizada para @${adminPasswordForm.username}.`);
+      cancelAdminPasswordChange();
+    } catch (err) {
+      setError(normalizeError(err));
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function handleCreateSocioSubmit(event) {
@@ -194,6 +251,16 @@ export default function SociosPage() {
                               <button className="icon-action danger" type="button" disabled={saving}
                                 onClick={async () => { if (confirm(`¿Dar de baja a @${s.username}?`)) { await request(`/admin/users/${s.id}/`, { method: "PATCH", body: JSON.stringify({ estado_socio: "NO_SOCIO" }) }); await loadSocios(); setStatus(`Baja tramitada para @${s.username}`); } }}>
                                 Baja
+                              </button>
+                            )}
+                            {s.id !== auth.profile?.id && (
+                              <button
+                                className="icon-action strong-danger"
+                                type="button"
+                                onClick={() => startAdminPasswordChange(s)}
+                                disabled={saving}
+                              >
+                                Cambiar contraseña
                               </button>
                             )}
                             <button className="icon-action" type="button" onClick={() => startEditingSocio(s)} disabled={saving}>Editar</button>
@@ -330,6 +397,64 @@ export default function SociosPage() {
           </form>
         </section>
       </div>
+
+      {/* Modal cambio forzado de contraseña */}
+      {adminPasswordForm.userId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4">
+          <div className="w-full max-w-md rounded-lg bg-white p-5 shadow-2xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wider text-rose-700">Acción administrativa</p>
+                <h2 className="mt-1 text-xl font-bold text-slate-950">Cambiar contraseña</h2>
+                <p className="mt-1 text-sm text-slate-600">
+                  Se actualizará la contraseña de @{adminPasswordForm.username}. La contraseña anterior no se muestra ni se necesita.
+                </p>
+              </div>
+              <button className="icon-action" type="button" onClick={cancelAdminPasswordChange} aria-label="Cerrar">
+                ×
+              </button>
+            </div>
+
+            <form className="mt-5 flex flex-col gap-3" onSubmit={handleAdminPasswordChange}>
+              <label className="field">
+                <span>Nueva contraseña</span>
+                <input
+                  autoComplete="new-password"
+                  minLength={8}
+                  pattern="(?=.*[A-Za-zÁÉÍÓÚÜÑáéíóúüñ])(?=.*\d).{8,}"
+                  required
+                  title={PASSWORD_RULE_TEXT}
+                  type="password"
+                  value={adminPasswordForm.new_password}
+                  onChange={(e) => setAdminPasswordForm((current) => ({ ...current, new_password: e.target.value }))}
+                />
+              </label>
+              <label className="field">
+                <span>Repetir nueva contraseña</span>
+                <input
+                  autoComplete="new-password"
+                  minLength={8}
+                  pattern="(?=.*[A-Za-zÁÉÍÓÚÜÑáéíóúüñ])(?=.*\d).{8,}"
+                  required
+                  title={PASSWORD_RULE_TEXT}
+                  type="password"
+                  value={adminPasswordForm.new_password_two}
+                  onChange={(e) => setAdminPasswordForm((current) => ({ ...current, new_password_two: e.target.value }))}
+                />
+              </label>
+              <p className="text-xs font-semibold text-slate-500">{PASSWORD_RULE_TEXT}</p>
+              <div className="mt-2 flex flex-wrap justify-end gap-2">
+                <button className="btn btn-secondary" type="button" onClick={cancelAdminPasswordChange} disabled={saving}>
+                  Cancelar
+                </button>
+                <button className="btn btn-danger" type="submit" disabled={saving}>
+                  {saving ? "Guardando..." : "Cambiar contraseña"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Modal ficha */}
       {viewingSocioDetails && (

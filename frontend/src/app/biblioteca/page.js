@@ -39,6 +39,7 @@ export default function BibliotecaPage() {
     }
   }, [auth, isAdmin, request]);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { void loadBiblioteca(); }, [loadBiblioteca]);
 
   const filteredLibros = useMemo(() => {

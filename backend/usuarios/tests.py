@@ -39,8 +39,9 @@ class UserApiTests(APITestCase):
                 "email": "maria@example.com",
                 "telefono": "600123123",
                 "dni_nif": "12345678A",
-                "numero_socio": "SOC-001",
+                "numero_socio": 1,
                 "es_socio": True,
+                "estado_socio": "ACEPTADA",
             },
             format="json",
         )
@@ -48,4 +49,68 @@ class UserApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         created = get_user_model().objects.get(username="maria")
         self.assertFalse(created.has_usable_password())
-        self.assertEqual(created.numero_socio, "SOC-001")
+        self.assertEqual(created.numero_socio, 1)
+
+    def test_register_requires_strong_password(self):
+        response = self.client.post(
+            reverse("auth_register"),
+            {
+                "username": "ana",
+                "email": "ana@example.com",
+                "password": "sololetras",
+                "password_two": "sololetras",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("mínimo 8 caracteres", str(response.data).lower())
+
+    def test_user_can_change_own_password_with_rules(self):
+        self.client.force_authenticate(user=self.user)
+
+        response = self.client.put(
+            reverse("user_password_change"),
+            {
+                "old_password": "test-pass-123",
+                "new_password": "Nueva1234",
+                "new_password_two": "Nueva1234",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password("Nueva1234"))
+
+    def test_admin_can_force_password_change_without_old_password(self):
+        self.client.force_authenticate(user=self.admin)
+
+        response = self.client.put(
+            reverse("admin-user-password-change", kwargs={"pk": self.user.pk}),
+            {
+                "new_password": "Forzada123",
+                "new_password_two": "Forzada123",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password("Forzada123"))
+
+    def test_admin_force_password_change_rejects_self(self):
+        self.client.force_authenticate(user=self.admin)
+
+        response = self.client.put(
+            reverse("admin-user-password-change", kwargs={"pk": self.admin.pk}),
+            {
+                "new_password": "Propia123",
+                "new_password_two": "Propia123",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.admin.refresh_from_db()
+        self.assertTrue(self.admin.check_password("test-pass-123"))

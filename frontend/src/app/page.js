@@ -11,6 +11,7 @@ import {
   dateKey, monthKey, toDateTimeLocal, addMinutes,
   createDefaultForm, buildCalendarDays, groupByDay,
   sortReservations, overlapsReservation, normalizeError,
+  isStrongPassword, PASSWORD_RULE_TEXT,
 } from "./lib/utils";
 
 export default function Home() {
@@ -43,6 +44,7 @@ export default function Home() {
     }
   }, [request]);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { void loadReservations(); }, [loadReservations]);
 
   const calendarDays = useMemo(() => buildCalendarDays(viewDate), [viewDate]);
@@ -72,6 +74,10 @@ export default function Home() {
     setStatus("");
     try {
       if (authMode === "register") {
+        if (!isStrongPassword(authForm.password)) {
+          setError(PASSWORD_RULE_TEXT);
+          return;
+        }
         await request("/auth/register/", { method: "POST", body: JSON.stringify(authForm) }, false);
         setStatus("Cuenta creada. Ya puedes iniciar sesion.");
         setAuthMode("login");

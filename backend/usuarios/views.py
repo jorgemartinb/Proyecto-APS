@@ -5,6 +5,7 @@ from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.permissions import IsAuthenticated, AllowAny, IsAdminUser
 from .serializers import (
+    AdminUserPasswordChangeSerializer,
     AdminUserSerializer,
     LogoutSerializer,
     UserPasswordChangeSerializer,
@@ -42,6 +43,29 @@ class AdminUserRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Usuario.objects.all()
     serializer_class = AdminUserSerializer
     permission_classes = [IsAdminUser]
+
+
+class AdminUserPasswordChangeView(APIView):
+    permission_classes = [IsAdminUser]
+
+    def put(self, request, pk):
+        try:
+            user = Usuario.objects.get(pk=pk)
+        except Usuario.DoesNotExist:
+            return Response({"detail": "Usuario no encontrado."}, status=status.HTTP_404_NOT_FOUND)
+
+        if user.pk == request.user.pk:
+            return Response(
+                {"detail": "Para cambiar tu propia contraseña, usa la opción de Seguridad en Mi Perfil."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        serializer = AdminUserPasswordChangeSerializer(data=request.data)
+        if serializer.is_valid():
+            user.set_password(serializer.validated_data['new_password'])
+            user.save()
+            return Response({"message": "Contraseña del usuario actualizada correctamente."}, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 # El propio usuario utilizará esta vista para rellenar su ficha completa y "Darse de Alta"

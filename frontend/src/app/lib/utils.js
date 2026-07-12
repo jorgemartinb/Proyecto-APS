@@ -2,6 +2,7 @@ export const DAY_FORMAT = new Intl.DateTimeFormat("es-ES", { weekday: "long", da
 export const MONTH_FORMAT = new Intl.DateTimeFormat("es-ES", { month: "long", year: "numeric" });
 export const TIME_FORMAT = new Intl.DateTimeFormat("es-ES", { hour: "2-digit", minute: "2-digit" });
 export const CURRENCY_FORMAT = new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR" });
+export const PASSWORD_RULE_TEXT = "Mínimo 8 caracteres, con letras y números.";
 export const WEEKDAYS = ["Lun", "Mar", "Mie", "Jue", "Vie", "Sab", "Dom"];
 
 export const FIELD_LABELS = {
@@ -12,6 +13,8 @@ export const FIELD_LABELS = {
   estado_socio: "Estado de socio", precio_aproximado: "Precio aproximado",
   descripcion: "Descripción", fecha_registro: "Fecha de Registro",
   numero_registro: "Número de Registro", respuesta_admin: "Respuesta / Comentarios",
+  old_password: "Contraseña actual", new_password: "Nueva contraseña",
+  new_password_two: "Repetir nueva contraseña",
 };
 
 export const ERROR_TRANSLATIONS = [
@@ -78,6 +81,9 @@ export function overlapsReservation(reservation, start, end, editingId) {
   const s = new Date(reservation.start_time);
   const e = new Date(reservation.end_time);
   return s < end && e > start;
+}
+export function isStrongPassword(password) {
+  return password.length >= 8 && /[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]/.test(password) && /\d/.test(password);
 }
 export function translateText(value) {
   if (value === null || value === undefined) return "";
