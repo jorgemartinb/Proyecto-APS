@@ -21,7 +21,7 @@ export default function NavBar() {
       }
     } catch { /* sesión ya inválida */ }
     updateAuth(null);
-    router.push("/");
+    router.replace("/login");
   }
 
   const isAdmin = auth?.profile?.is_staff || false;

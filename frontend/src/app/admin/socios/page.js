@@ -35,7 +35,8 @@ export default function SociosPage() {
     new_password_two: "",
   });
 
-  if (!auth || !isAdmin) redirect("/");
+  if (!auth) redirect("/login");
+  if (!isAdmin) redirect("/");
 
   const loadSocios = useCallback(async () => {
     setLoadingSocios(true);

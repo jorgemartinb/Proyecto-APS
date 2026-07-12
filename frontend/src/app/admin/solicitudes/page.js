@@ -22,7 +22,8 @@ export default function SolicitudesPage() {
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
-  if (!auth || !isAdmin) redirect("/");
+  if (!auth) redirect("/login");
+  if (!isAdmin) redirect("/");
 
   const loadAll = useCallback(async () => {
     setLoading(true);

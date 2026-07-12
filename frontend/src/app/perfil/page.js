@@ -18,7 +18,7 @@ export default function PerfilPage() {
   });
 
   if (!auth) {
-    redirect("/");
+    redirect("/login");
   }
 
   async function handleSolicitarBaja() {
