@@ -1,12 +1,13 @@
 "use client";
 
-import { TIME_FORMAT } from "../lib/utils";
+import { RECURRENCE_LABELS, TIME_FORMAT } from "../lib/utils";
 
 export default function ReservationItem({ currentUser, reservation, saving, onDelete, onEdit, isAdmin, onUpdateStatus }) {
   const start = new Date(reservation.start_time);
   const end = new Date(reservation.end_time);
   const isMine = currentUser && reservation.user_username === currentUser;
   const est = reservation.estado || "PENDIENTE";
+  const reservationId = reservation.source_id || reservation.id;
 
   return (
     <article className={`reservation-item ${isMine ? "mine" : ""} ${
@@ -24,16 +25,21 @@ export default function ReservationItem({ currentUser, reservation, saving, onDe
           {est === "PENDIENTE" && <span className="bg-amber-100 text-amber-800 text-[10px] px-1.5 rounded font-medium">Pendiente</span>}
           {est === "RECHAZADA" && <span className="bg-rose-100 text-rose-800 text-[10px] px-1.5 rounded font-medium">Rechazada</span>}
           {est === "ACEPTADA" && <span className="bg-emerald-100 text-emerald-800 text-[10px] px-1.5 rounded font-medium">Aceptada</span>}
+          {reservation.is_recurring && (
+            <span className="bg-sky-100 text-sky-800 text-[10px] px-1.5 rounded font-medium">
+              {RECURRENCE_LABELS[reservation.recurrence_type] || "Periódica"}
+            </span>
+          )}
         </p>
       </div>
       <div className="reservation-actions flex flex-col gap-1 items-end">
         {isMine && est === "PENDIENTE" ? (
           <div className="flex gap-2">
             <button className="icon-action" type="button" onClick={() => onEdit(reservation)} disabled={saving}>Editar</button>
-            <button className="icon-action danger" type="button" onClick={() => onDelete(reservation.id)} disabled={saving}>Borrar</button>
+            <button className="icon-action danger" type="button" onClick={() => onDelete(reservationId)} disabled={saving}>Borrar</button>
           </div>
         ) : isMine ? (
-          <button className="icon-action danger" type="button" onClick={() => onDelete(reservation.id)} disabled={saving}>Eliminar</button>
+          <button className="icon-action danger" type="button" onClick={() => onDelete(reservationId)} disabled={saving}>Eliminar</button>
         ) : null}
         {isAdmin && (
           <div className="flex flex-col gap-1 mt-1 items-end">
@@ -46,7 +52,7 @@ export default function ReservationItem({ currentUser, reservation, saving, onDe
               </div>
             )}
             <button className="icon-action danger" type="button"
-              onClick={() => { if (confirm("¿Eliminar esta reserva del sistema?")) onDelete(reservation.id); }}
+              onClick={() => { if (confirm("¿Eliminar esta reserva del sistema?")) onDelete(reservationId); }}
               disabled={saving}>Borrar</button>
           </div>
         )}

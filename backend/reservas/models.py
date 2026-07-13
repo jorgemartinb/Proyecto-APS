@@ -10,6 +10,11 @@ class Reservation(models.Model):
         ('ACEPTADA', 'Aceptada'),
         ('RECHAZADA', 'Rechazada'),
     ]
+    PERIODICIDADES = [
+        ('SEMANAL', 'Semanal'),
+        ('MENSUAL', 'Mensual'),
+        ('TRIMESTRAL', 'Trimestral'),
+    ]
 
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -26,6 +31,13 @@ class Reservation(models.Model):
         max_length=20,
         choices=ESTADOS_RESERVA,
         default='PENDIENTE'
+    )
+    is_recurring = models.BooleanField(default=False)
+    recurrence_type = models.CharField(
+        max_length=20,
+        choices=PERIODICIDADES,
+        blank=True,
+        null=True
     )
 
     class Meta:

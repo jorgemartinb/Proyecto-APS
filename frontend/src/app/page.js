@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Image from "next/image";
 import { useAuth } from "./context/AuthContext";
 import Alert from "./components/Alert";
 import AuthForm from "./components/AuthForm";
@@ -11,6 +12,7 @@ import {
   dateKey, monthKey, toDateTimeLocal, addMinutes,
   createDefaultForm, buildCalendarDays, groupByDay,
   sortReservations, overlapsReservation, normalizeError,
+  expandRecurringReservations, WEEKDAY_LONG_FORMAT,
   isStrongPassword, PASSWORD_RULE_TEXT,
 } from "./lib/utils";
 
@@ -48,7 +50,13 @@ export default function Home() {
   useEffect(() => { void loadReservations(); }, [loadReservations]);
 
   const calendarDays = useMemo(() => buildCalendarDays(viewDate), [viewDate]);
-  const reservationsByDay = useMemo(() => groupByDay(reservations), [reservations]);
+  const visibleReservations = useMemo(() => {
+    const rangeStart = calendarDays[0] || viewDate;
+    const rangeEnd = new Date(calendarDays[calendarDays.length - 1] || viewDate);
+    rangeEnd.setHours(23, 59, 59, 999);
+    return expandRecurringReservations(reservations, rangeStart, rangeEnd);
+  }, [calendarDays, reservations, viewDate]);
+  const reservationsByDay = useMemo(() => groupByDay(visibleReservations), [visibleReservations]);
   const selectedKey = dateKey(selectedDate);
   const todaysReservations = reservationsByDay[selectedKey] || [];
   const myReservations = useMemo(
@@ -64,8 +72,8 @@ export default function Home() {
     const start = new Date(form.start_time);
     const end = new Date(form.end_time);
     if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start >= end) return null;
-    return reservations.find((r) => overlapsReservation(r, start, end, editingId)) || null;
-  }, [editingId, form.end_time, form.start_time, reservations]);
+    return visibleReservations.find((r) => overlapsReservation(r, start, end, editingId)) || null;
+  }, [editingId, form.end_time, form.start_time, visibleReservations]);
 
   async function handleAuthSubmit(event) {
     event.preventDefault();
@@ -104,7 +112,13 @@ export default function Home() {
     setError("");
     setStatus("");
     try {
-      const payload = { title: form.title.trim(), start_time: new Date(form.start_time).toISOString(), end_time: new Date(form.end_time).toISOString() };
+      const payload = {
+        title: form.title.trim(),
+        start_time: new Date(form.start_time).toISOString(),
+        end_time: new Date(form.end_time).toISOString(),
+        is_recurring: Boolean(form.is_recurring),
+        recurrence_type: form.is_recurring ? form.recurrence_type : null,
+      };
       await request(`/reservations/${editingId ? `${editingId}/` : ""}`, { method: editingId ? "PUT" : "POST", body: JSON.stringify(payload) });
       await loadReservations();
       setEditingId(null);
@@ -149,10 +163,17 @@ export default function Home() {
   }
 
   function startEditing(reservation) {
-    setEditingId(reservation.id);
+    const sourceId = reservation.source_id || reservation.id;
+    setEditingId(sourceId);
     setSelectedDate(new Date(reservation.start_time));
     setViewDate(new Date(reservation.start_time));
-    setForm({ title: reservation.title, start_time: toDateTimeLocal(reservation.start_time), end_time: toDateTimeLocal(reservation.end_time) });
+    setForm({
+      title: reservation.title,
+      start_time: toDateTimeLocal(reservation.start_time),
+      end_time: toDateTimeLocal(reservation.end_time),
+      is_recurring: Boolean(reservation.is_recurring),
+      recurrence_type: reservation.recurrence_type || "SEMANAL",
+    });
   }
 
   function changeMonth(offset) {
@@ -176,6 +197,18 @@ export default function Home() {
     reservationFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
+  function recurrenceSummary() {
+    const start = new Date(form.start_time);
+    if (Number.isNaN(start.getTime())) return "Selecciona fecha y hora de inicio para calcular la periodicidad.";
+    if (form.recurrence_type === "SEMANAL") {
+      return `Se repetirá cada ${WEEKDAY_LONG_FORMAT.format(start)} a las ${TIME_FORMAT.format(start)}.`;
+    }
+    if (form.recurrence_type === "MENSUAL") {
+      return `Se repetirá cada mes el día ${start.getDate()} a las ${TIME_FORMAT.format(start)}.`;
+    }
+    return `Se repetirá cada 3 meses el día ${start.getDate()} a las ${TIME_FORMAT.format(start)}.`;
+  }
+
   if (!auth) {
     return (
       <main className="min-h-screen text-slate-950">
@@ -184,6 +217,16 @@ export default function Home() {
           <div className="grid gap-5 lg:grid-cols-[minmax(0,1.1fr)_420px]">
             <section className="panel flex flex-col justify-between gap-6">
               <div>
+                <div className="login-logo-wrap mb-6">
+                  <Image
+                    src="/logo_aps.jpeg"
+                    alt="Logotipo de APS"
+                    width={112}
+                    height={112}
+                    className="login-logo"
+                    priority
+                  />
+                </div>
                 <p className="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-700">Bienvenido</p>
                 <h1 className="mt-3 text-3xl font-semibold tracking-normal text-slate-950 sm:text-4xl">
                   Gestiona reservas, compras y vida del centro desde un solo sitio.
@@ -348,6 +391,25 @@ export default function Home() {
                   <input required disabled={!auth || saving} type="datetime-local" value={form.end_time}
                     onChange={(e) => setForm((c) => ({ ...c, end_time: e.target.value }))} />
                 </label>
+                <label className="checkbox-field">
+                  <input type="checkbox" checked={form.is_recurring} disabled={!auth || saving}
+                    onChange={(e) => setForm((c) => ({ ...c, is_recurring: e.target.checked }))} />
+                  <span>Repetir cita</span>
+                </label>
+                {form.is_recurring ? (
+                  <div className="recurrence-panel">
+                    <label className="field">
+                      <span>Periodicidad</span>
+                      <select disabled={!auth || saving} value={form.recurrence_type}
+                        onChange={(e) => setForm((c) => ({ ...c, recurrence_type: e.target.value }))}>
+                        <option value="SEMANAL">Semanal</option>
+                        <option value="MENSUAL">Mensual</option>
+                        <option value="TRIMESTRAL">Trimestral</option>
+                      </select>
+                    </label>
+                    <p>{recurrenceSummary()}</p>
+                  </div>
+                ) : null}
                 {conflictingReservation ? (
                   <div className="conflict-warning" role="alert">
                     <strong>Tramo ocupado</strong>

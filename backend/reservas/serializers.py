@@ -7,18 +7,31 @@ class ReservationSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Reservation
-        fields = ['id', 'user', 'user_username', 'title', 'start_time', 'end_time', 'created_at', 'estado']
+        fields = [
+            'id', 'user', 'user_username', 'title', 'start_time', 'end_time',
+            'created_at', 'estado', 'is_recurring', 'recurrence_type'
+        ]
         read_only_fields = ['user', 'user_username', 'created_at']
 
     def validate(self, data):
         start_time = data.get('start_time', self.instance.start_time if self.instance else None)
         end_time = data.get('end_time', self.instance.end_time if self.instance else None)
         request = self.context.get('request')
+        is_recurring = data.get('is_recurring', self.instance.is_recurring if self.instance else False)
+        recurrence_type = data.get('recurrence_type', self.instance.recurrence_type if self.instance else None)
 
         if 'estado' in data and request and not request.user.is_staff:
             raise serializers.ValidationError(
                 {"estado": "Solo una administradora puede cambiar el estado de una reserva."}
             )
+
+        if is_recurring and not recurrence_type:
+            raise serializers.ValidationError(
+                {"recurrence_type": "Elige una periodicidad para repetir la cita."}
+            )
+
+        if not is_recurring:
+            data['recurrence_type'] = None
 
         if start_time and end_time:
             # 1. Validación de orden cronológico

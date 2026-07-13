@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import { redirect, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import Image from "next/image";
+import { useRouter } from "next/navigation";
 import Alert from "../components/Alert";
 import AuthForm from "../components/AuthForm";
 import { useAuth } from "../context/AuthContext";
@@ -23,9 +24,11 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
-  if (auth) {
-    redirect("/");
-  }
+  useEffect(() => {
+    if (auth) router.replace("/");
+  }, [auth, router]);
+
+  if (auth) return null;
 
   async function handleAuthSubmit(event) {
     event.preventDefault();
@@ -71,6 +74,16 @@ export default function LoginPage() {
       <Alert status={status} error={error} onClose={() => { setError(""); setStatus(""); }} />
       <div className="mx-auto grid w-full max-w-5xl gap-5 px-4 py-8 sm:px-6 lg:grid-cols-[minmax(0,1fr)_420px] lg:px-8">
         <section className="panel flex flex-col justify-center">
+          <div className="login-logo-wrap mb-6">
+            <Image
+              src="/logo_aps.jpeg"
+              alt="Logotipo de APS"
+              width={112}
+              height={112}
+              className="login-logo"
+              priority
+            />
+          </div>
           <p className="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-700">Acceso</p>
           <h1 className="mt-3 text-3xl font-semibold tracking-normal text-slate-950 sm:text-4xl">
             Inicia sesión en la asociación.

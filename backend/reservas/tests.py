@@ -136,3 +136,72 @@ class ReservationOverlapTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(Reservation.objects.count(), 2)
+
+    def test_creates_weekly_recurring_reservation(self):
+        self.client.force_authenticate(user=self.user_one)
+        response = self.client.post(
+            self.url,
+            {
+                "title": "Clase semanal",
+                "start_time": self.start_time.isoformat(),
+                "end_time": self.end_time.isoformat(),
+                "is_recurring": True,
+                "recurrence_type": "SEMANAL",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        reservation = Reservation.objects.get()
+        self.assertTrue(reservation.is_recurring)
+        self.assertEqual(reservation.recurrence_type, "SEMANAL")
+
+    def test_creates_monthly_recurring_reservation(self):
+        self.client.force_authenticate(user=self.user_one)
+        response = self.client.post(
+            self.url,
+            {
+                "title": "Reunion mensual",
+                "start_time": self.start_time.isoformat(),
+                "end_time": self.end_time.isoformat(),
+                "is_recurring": True,
+                "recurrence_type": "MENSUAL",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(Reservation.objects.get().recurrence_type, "MENSUAL")
+
+    def test_creates_quarterly_recurring_reservation(self):
+        self.client.force_authenticate(user=self.user_one)
+        response = self.client.post(
+            self.url,
+            {
+                "title": "Revision trimestral",
+                "start_time": self.start_time.isoformat(),
+                "end_time": self.end_time.isoformat(),
+                "is_recurring": True,
+                "recurrence_type": "TRIMESTRAL",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(Reservation.objects.get().recurrence_type, "TRIMESTRAL")
+
+    def test_recurring_reservation_requires_recurrence_type(self):
+        self.client.force_authenticate(user=self.user_one)
+        response = self.client.post(
+            self.url,
+            {
+                "title": "Reserva incompleta",
+                "start_time": self.start_time.isoformat(),
+                "end_time": self.end_time.isoformat(),
+                "is_recurring": True,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(Reservation.objects.count(), 0)

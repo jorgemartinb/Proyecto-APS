@@ -1,9 +1,15 @@
 export const DAY_FORMAT = new Intl.DateTimeFormat("es-ES", { weekday: "long", day: "numeric", month: "long" });
 export const MONTH_FORMAT = new Intl.DateTimeFormat("es-ES", { month: "long", year: "numeric" });
 export const TIME_FORMAT = new Intl.DateTimeFormat("es-ES", { hour: "2-digit", minute: "2-digit" });
+export const WEEKDAY_LONG_FORMAT = new Intl.DateTimeFormat("es-ES", { weekday: "long" });
 export const CURRENCY_FORMAT = new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR" });
 export const PASSWORD_RULE_TEXT = "Mínimo 8 caracteres, con letras y números.";
 export const WEEKDAYS = ["Lun", "Mar", "Mie", "Jue", "Vie", "Sab", "Dom"];
+export const RECURRENCE_LABELS = {
+  SEMANAL: "Semanal",
+  MENSUAL: "Mensual",
+  TRIMESTRAL: "Trimestral",
+};
 
 export const FIELD_LABELS = {
   nombre: "Nombre", username: "Usuario", email: "Email", password: "Contraseña",
@@ -55,7 +61,13 @@ export function createDefaultForm(selectedDate) {
   start.setHours(9, 0, 0, 0);
   const end = new Date(start);
   end.setHours(10, 0, 0, 0);
-  return { title: "", start_time: toDateTimeLocal(start), end_time: toDateTimeLocal(end) };
+  return {
+    title: "",
+    start_time: toDateTimeLocal(start),
+    end_time: toDateTimeLocal(end),
+    is_recurring: false,
+    recurrence_type: "SEMANAL",
+  };
 }
 export function buildCalendarDays(viewDate) {
   const first = new Date(viewDate.getFullYear(), viewDate.getMonth(), 1);
@@ -75,8 +87,66 @@ export function groupByDay(reservations) {
 export function sortReservations(reservations) {
   return [...reservations].sort((a, b) => new Date(a.start_time) - new Date(b.start_time));
 }
+function addMonthsSameDay(date, months) {
+  const next = new Date(date);
+  next.setMonth(next.getMonth() + months, 1);
+  const lastDay = new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate();
+  if (date.getDate() > lastDay) return null;
+  next.setDate(date.getDate());
+  return next;
+}
+function isSameDate(left, right) {
+  return left.getFullYear() === right.getFullYear()
+    && left.getMonth() === right.getMonth()
+    && left.getDate() === right.getDate();
+}
+export function expandRecurringReservations(reservations, rangeStart, rangeEnd) {
+  const expanded = [];
+  reservations.forEach((reservation) => {
+    const start = new Date(reservation.start_time);
+    const end = new Date(reservation.end_time);
+    if (end >= rangeStart && start <= rangeEnd) expanded.push(reservation);
+    if (!reservation.is_recurring || !reservation.recurrence_type) return;
+
+    const duration = end.getTime() - start.getTime();
+    let occurrenceStart = new Date(start);
+    const step = reservation.recurrence_type === "SEMANAL" ? "week" : "month";
+    const monthStep = reservation.recurrence_type === "TRIMESTRAL" ? 3 : 1;
+    let monthOffset = 0;
+
+    while (occurrenceStart <= rangeEnd) {
+      if (step === "week") {
+        occurrenceStart = new Date(
+            occurrenceStart.getFullYear(),
+            occurrenceStart.getMonth(),
+            occurrenceStart.getDate() + 7,
+            occurrenceStart.getHours(),
+            occurrenceStart.getMinutes(),
+          );
+      } else {
+        monthOffset += monthStep;
+        const nextOccurrence = addMonthsSameDay(start, monthOffset);
+        if (!nextOccurrence) continue;
+        occurrenceStart = nextOccurrence;
+      }
+
+      if (occurrenceStart > rangeEnd) break;
+      const occurrenceEnd = new Date(occurrenceStart.getTime() + duration);
+      if (occurrenceEnd < rangeStart || isSameDate(occurrenceStart, start)) continue;
+      expanded.push({
+        ...reservation,
+        id: `${reservation.id}-${dateKey(occurrenceStart)}`,
+        source_id: reservation.id,
+        start_time: occurrenceStart.toISOString(),
+        end_time: occurrenceEnd.toISOString(),
+        is_recurring_occurrence: true,
+      });
+    }
+  });
+  return sortReservations(expanded);
+}
 export function overlapsReservation(reservation, start, end, editingId) {
-  if (editingId && reservation.id === editingId) return false;
+  if (editingId && (reservation.id === editingId || reservation.source_id === editingId)) return false;
   if (reservation.estado === "RECHAZADA") return false;
   const s = new Date(reservation.start_time);
   const e = new Date(reservation.end_time);
