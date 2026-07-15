@@ -560,6 +560,14 @@ textarea:disabled {
   }
 }
 
+/* Oculta scrollbar en la barra de nav móvil */
+.scrollbar-none {
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
 @media print {
   body * {
     visibility: hidden;
