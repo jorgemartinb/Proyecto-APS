@@ -560,14 +560,24 @@ textarea:disabled {
   }
 }
 
-/* Barra de nav móvil: oculta scrollbar y habilita scroll táctil en iOS */
+/* Barra de nav móvil: scroll horizontal táctil en iOS */
 .mobile-nav-scroll {
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-x: contain;
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 .mobile-nav-scroll::-webkit-scrollbar {
   display: none;
+}
+/* Cada ítem crece para rellenar en pantallas grandes,
+   pero tiene un mínimo de 68px para forzar overflow en iPhone SE (320px) */
+.mobile-nav-item {
+  flex-grow: 1;
+  flex-shrink: 0;
+  flex-basis: 0%;
+  min-width: 68px;
 }
 
 @media print {
