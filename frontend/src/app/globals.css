@@ -560,11 +560,13 @@ textarea:disabled {
   }
 }
 
-/* Oculta scrollbar en la barra de nav móvil */
-.scrollbar-none {
+/* Barra de nav móvil: oculta scrollbar y habilita scroll táctil en iOS */
+.mobile-nav-scroll {
   scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
 }
-.scrollbar-none::-webkit-scrollbar {
+.mobile-nav-scroll::-webkit-scrollbar {
   display: none;
 }
 

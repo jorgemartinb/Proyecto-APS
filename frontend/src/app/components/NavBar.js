@@ -97,14 +97,14 @@ export default function NavBar() {
       </header>
 
       {/* ── Barra inferior (móvil) ── */}
-      <nav className="sm:hidden fixed bottom-0 left-0 right-0 z-40 flex overflow-x-auto border-t border-slate-200 bg-white scrollbar-none">
+      <nav className="sm:hidden fixed bottom-0 left-0 right-0 z-40 flex overflow-x-auto overflow-y-hidden border-t border-slate-200 bg-white mobile-nav-scroll">
         {visibleMobile.map((l) => {
           const active = l.href === "/" ? pathname === "/" : pathname.startsWith(l.href);
           return (
             <Link
               key={l.label}
               href={l.href}
-              className={`flex shrink-0 flex-col items-center justify-center gap-0.5 px-3 py-2 min-w-[64px] text-[10px] font-semibold transition ${
+              className={`flex flex-1 flex-col items-center justify-center gap-0.5 py-2 min-w-[68px] text-[10px] font-semibold transition ${
                 active ? "text-emerald-700" : "text-slate-400"
               }`}
             >
