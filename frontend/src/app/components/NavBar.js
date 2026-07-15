@@ -40,8 +40,8 @@ export default function NavBar() {
     { href: "/", icon: "📅", label: "Inicio", always: true },
     { href: "/biblioteca", icon: "📚", label: "Biblioteca", auth: true },
     { href: "/plenos", icon: "🏛️", label: "Pleno", auth: true },
-    { href: "/compras", icon: "🛒", label: "Compras", auth: true, hide: isAdmin },
-    { href: "/perfil", icon: "👤", label: "Perfil", auth: true, hide: isAdmin },
+    { href: "/compras", icon: "🛒", label: "Compras", auth: true },
+    { href: "/perfil", icon: "👤", label: "Perfil", auth: true },
     { href: "/admin/solicitudes", icon: "⏳", label: "Pendientes", admin: true },
     { href: "/admin/socios", icon: "👥", label: "Socios", admin: true },
   ];
