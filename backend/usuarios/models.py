@@ -61,6 +61,13 @@ class Usuario(AbstractUser):
     cuales_otras_asoc = models.TextField(blank=True, null=True)
     autoriza_imagenes = models.BooleanField(default=False, verbose_name="Autoriza publicación de imágenes")
 
+    @classmethod
+    def get_next_numero_socio(cls):
+        ultimo_usuario = cls.objects.filter(numero_socio__isnull=False).order_by('numero_socio').last()
+        if ultimo_usuario and ultimo_usuario.numero_socio:
+            return ultimo_usuario.numero_socio + 1
+        return 1
+
     def save(self, *args, **kwargs):
         # Sincronizamos automáticamente los flags booleanos según el estado de la solicitud
         if self.estado_socio == 'ACEPTADA':
@@ -79,12 +86,7 @@ class Usuario(AbstractUser):
         # ⚡ LÓGICA DEL NÚMERO DE SOCIO AUTOMÁTICO Y CORRELATIVO
         # Si el usuario ahora es socio, está de alta y todavía no tiene un número asignado:
         if self.es_socio and self.is_alta and not self.numero_socio:
-            # Buscamos el número de socio más alto que exista en la base de datos
-            ultimo_usuario = Usuario.objects.filter(numero_socio__isnull=False).order_by('numero_socio').last()
-            if ultimo_usuario and ultimo_usuario.numero_socio:
-                self.numero_socio = ultimo_usuario.numero_socio + 1
-            else:
-                self.numero_socio = 1  # Si es el primer socio registrado en el sistema
+            self.numero_socio = Usuario.get_next_numero_socio()
         
         # Guardamos la fecha de baja si pasa a estar inactivo (Baja)
         if not self.is_alta and not self.fecha_baja:

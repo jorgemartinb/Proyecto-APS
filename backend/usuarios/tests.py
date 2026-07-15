@@ -51,6 +51,59 @@ class UserApiTests(APITestCase):
         self.assertFalse(created.has_usable_password())
         self.assertEqual(created.numero_socio, 1)
 
+    def test_new_member_without_manual_number_uses_highest_existing_number(self):
+        User = get_user_model()
+        User.objects.create_user(username="socio101", password="test-pass-123", estado_socio="ACEPTADA", numero_socio=101)
+        User.objects.create_user(username="socio3", password="test-pass-123", estado_socio="ACEPTADA", numero_socio=3)
+        self.client.force_authenticate(user=self.admin)
+
+        response = self.client.post(
+            reverse("admin-user-list-create"),
+            {
+                "username": "nuevo",
+                "first_name": "Nuevo",
+                "last_name": "Socio",
+                "email": "nuevo@example.com",
+                "telefono": "600000001",
+                "dni_nif": "87654321B",
+                "es_socio": True,
+                "estado_socio": "ACEPTADA",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        created = User.objects.get(username="nuevo")
+        self.assertEqual(created.numero_socio, 102)
+
+    def test_admin_manual_number_reassigns_previous_holder_to_next_highest(self):
+        User = get_user_model()
+        previous_holder = User.objects.create_user(
+            username="socio3",
+            password="test-pass-123",
+            estado_socio="ACEPTADA",
+            numero_socio=3,
+        )
+        target = User.objects.create_user(
+            username="socio101",
+            password="test-pass-123",
+            estado_socio="ACEPTADA",
+            numero_socio=101,
+        )
+        self.client.force_authenticate(user=self.admin)
+
+        response = self.client.patch(
+            reverse("admin-user-detail", kwargs={"pk": target.pk}),
+            {"numero_socio": 3},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        previous_holder.refresh_from_db()
+        target.refresh_from_db()
+        self.assertEqual(target.numero_socio, 3)
+        self.assertEqual(previous_holder.numero_socio, 102)
+
     def test_register_requires_strong_password(self):
         response = self.client.post(
             reverse("auth_register"),

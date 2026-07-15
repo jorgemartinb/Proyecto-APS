@@ -1,4 +1,5 @@
 from django.contrib.auth import get_user_model
+from django.db import transaction
 from rest_framework import serializers
 
 Usuario = get_user_model()
@@ -55,13 +56,45 @@ class AdminUserSerializer(serializers.ModelSerializer):
         model = Usuario
         exclude = ['password']
         read_only_fields = ['id']
+        extra_kwargs = {
+            'numero_socio': {'validators': []},
+        }
+
+    def _estado_permite_numero_socio(self, validated_data, current_user=None):
+        default_estado = current_user.estado_socio if current_user else Usuario._meta.get_field('estado_socio').get_default()
+        estado_socio = validated_data.get('estado_socio', default_estado)
+        return estado_socio not in ['NO_SOCIO', 'RECHAZADA']
+
+    def _reassign_conflicting_numero_socio(self, numero_socio, current_user=None):
+        if not numero_socio:
+            return
+
+        queryset = Usuario.objects.filter(numero_socio=numero_socio)
+        if current_user and current_user.pk:
+            queryset = queryset.exclude(pk=current_user.pk)
+
+        conflicting_user = queryset.first()
+        if not conflicting_user:
+            return
+
+        conflicting_user.numero_socio = Usuario.get_next_numero_socio()
+        conflicting_user.save()
 
     def create(self, validated_data):
         # Cuando el admin crea un usuario manualmente, lo creamos sin contraseña asignada por seguridad.
-        user = Usuario(**validated_data)
-        user.set_unusable_password()
-        user.save()
-        return user
+        with transaction.atomic():
+            if self._estado_permite_numero_socio(validated_data):
+                self._reassign_conflicting_numero_socio(validated_data.get('numero_socio'))
+            user = Usuario(**validated_data)
+            user.set_unusable_password()
+            user.save()
+            return user
+
+    def update(self, instance, validated_data):
+        with transaction.atomic():
+            if 'numero_socio' in validated_data and self._estado_permite_numero_socio(validated_data, current_user=instance):
+                self._reassign_conflicting_numero_socio(validated_data.get('numero_socio'), current_user=instance)
+            return super().update(instance, validated_data)
 
 class UserPasswordChangeSerializer(serializers.Serializer):
     old_password = serializers.CharField(write_only=True)
