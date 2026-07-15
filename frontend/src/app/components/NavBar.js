@@ -104,12 +104,10 @@ export default function NavBar() {
             <Link
               key={l.label}
               href={l.href}
-              className={`mobile-nav-item flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-semibold transition ${
-                active ? "text-emerald-700" : "text-slate-400"
-              }`}
+              className={`mobile-nav-item ${active ? "text-emerald-700" : "text-slate-400"}`}
             >
-              <span className="text-xl leading-none">{l.icon}</span>
-              <span className="whitespace-nowrap">{l.label}</span>
+              <span style={{ fontSize: "22px", lineHeight: 1 }}>{l.icon}</span>
+              <span className="mobile-nav-label" style={{ whiteSpace: "nowrap" }}>{l.label}</span>
             </Link>
           );
         })}
