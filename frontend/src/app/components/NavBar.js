@@ -111,6 +111,16 @@ export default function NavBar() {
             </Link>
           );
         })}
+        {auth && (
+          <button
+            onClick={handleLogout}
+            className="mobile-nav-item text-slate-400"
+            style={{ background: "none", border: "none", cursor: "pointer" }}
+          >
+            <span style={{ fontSize: "22px", lineHeight: 1 }}>🚪</span>
+            <span className="mobile-nav-label" style={{ whiteSpace: "nowrap" }}>Salir</span>
+          </button>
+        )}
       </nav>
     </>
   );
